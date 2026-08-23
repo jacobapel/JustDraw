@@ -343,6 +343,12 @@ body{ position:fixed; overflow:hidden; }
   <span class="step-label" id="naturalLabel" style="display:none">עוצמה</span>
   <input type="range" id="naturalIntensity" min="0" max="100" value="50" oninput="setNaturalIntensity(this.value)" style="display:none">
   <span id="naturalVal" style="display:none">50%</span>
+  <!-- ruler/compass rotation controls -->
+  <div class="sep" id="rotSep" style="display:none"></div>
+  <span class="step-label" id="rotLabel" style="display:none">סיבוב</span>
+  <button class="step-btn" id="rotMinus" style="display:none" onclick="rotateToolBy(-1)">−</button>
+  <span id="rotVal" style="display:none">0°</span>
+  <button class="step-btn" id="rotPlus"  style="display:none" onclick="rotateToolBy(1)">+</button>
   <div class="sep"></div>
   <span class="step-label">טקסט</span>
   <button class="step-btn" onclick="changeFontSize(-2)">−</button>
@@ -364,9 +370,9 @@ body{ position:fixed; overflow:hidden; }
     <canvas id="mainCanvas"></canvas>
     <canvas id="selCanvas"></canvas>
     <canvas id="pieceCanvas"></canvas>
-    <canvas id="rulerCanvas" style="position:absolute;top:0;left:0;z-index:15;display:none;touch-action:none;"></canvas>
-    <canvas id="compassCanvas" style="position:absolute;top:0;left:0;z-index:15;display:none;touch-action:none;"></canvas>
   </div>
+  <canvas id="rulerCanvas" style="position:absolute;top:0;left:0;z-index:15;display:none;touch-action:none;"></canvas>
+  <canvas id="compassCanvas" style="position:absolute;top:0;left:0;z-index:15;display:none;touch-action:none;"></canvas>
 
   <!-- compass controls (bottom sheet style) -->
   <div id="compassCtrl" style="display:none;position:fixed;bottom:var(--bar-h);left:0;right:0;
@@ -539,6 +545,19 @@ body{ position:fixed; overflow:hidden; }
   <button class="tool-btn" onclick="clearAll()" style="color:#e94560"><span class="icon">🗑️</span><span class="lbl">נקה</span></button>
   <div class="vdiv"></div>
   <button class="tool-btn" onclick="openPuzzle()"><span class="icon">🧩</span><span class="lbl">פאזל</span></button>
+  <div class="vdiv"></div>
+  <button class="tool-btn" onclick="toggleHelp()"><span class="icon">❓</span><span class="lbl">עזרה</span></button>
+</div>
+
+<!-- HELP PANEL -->
+<div id="helpPanel" style="display:none;position:fixed;z-index:80;top:0;left:0;right:0;bottom:0;
+  background:rgba(10,10,30,0.96);overflow-y:auto;-webkit-overflow-scrolling:touch;
+  font-family:'Heebo',sans-serif;color:#e0e0ff;direction:rtl;padding:16px 16px 80px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;position:sticky;top:0;background:rgba(10,10,30,0.98);padding:10px 0;z-index:1;">
+    <h2 style="margin:0;font-size:20px;color:#fff">❓ עזרה — לוח ציור</h2>
+    <button onclick="toggleHelp()" style="background:#e94560;border:none;color:#fff;font-size:18px;width:36px;height:36px;border-radius:50%;cursor:pointer;">✕</button>
+  </div>
+  <div id="helpContent"></div>
 </div>
 
 <input type="file" id="pasteFileInput"  class="hidden-input" accept="image/*" onchange="loadImageFile(this,false)">
@@ -798,7 +817,11 @@ RC.addEventListener('pointerdown',onRulerDown,{passive:false});
 RC.addEventListener('pointermove',onRulerMove,{passive:false});
 RC.addEventListener('pointerup',  onRulerUp,  {passive:false});
 RC.addEventListener('pointercancel',onRulerUp,{passive:false});
-function twoAngleMap(pts){const a=[...pts.values()];return Math.atan2(a[1].y-a[0].y,a[1].x-a[0].x);}
+RC.addEventListener('wheel', e=>{
+  e.preventDefault();
+  R.angle += e.deltaY * 0.005;
+  drawRulerOverlay();
+},{passive:false});
 function getOvXY(e,el){const r=el.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
 function onRulerDown(e){
   e.preventDefault();rulerPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -808,10 +831,31 @@ function onRulerDown(e){
   if(hitPencilHandle(x,y)){R.drag='pencil';R.clickT=Date.now();R.clickPos={x,y};}
   else if(hitRulerBody(x,y)){R.drag='ruler';R.dragOff={x:x-R.pos.x,y:y-R.pos.y};}
 }
+// also catch second finger that lands outside RC (on wrap/inner)
+wrap.addEventListener('pointerdown', e=>{
+  if(mode!=='ruler') return;
+  zPtrs.delete(e.pointerId); // prevent zoom from stealing this pointer
+  if(rulerPointers.has(e.pointerId)) return;
+  rulerPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(rulerPointers.size===2){R.touchA0=twoAngleMap(rulerPointers);R.touchR0=R.angle;}
+},{passive:false});
+wrap.addEventListener('pointermove', e=>{
+  if(mode!=='ruler'||!rulerPointers.has(e.pointerId)) return;
+  rulerPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(rulerPointers.size===2&&R.touchA0!==null){
+    R.angle=R.touchR0+(twoAngleMap(rulerPointers)-R.touchA0);
+    drawRulerOverlay();
+  }
+},{passive:false});
+wrap.addEventListener('pointerup', e=>{
+  if(mode!=='ruler') return;
+  rulerPointers.delete(e.pointerId);
+  if(rulerPointers.size<2) R.touchA0=null;
+},{passive:false});
 function onRulerMove(e){
   e.preventDefault();rulerPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(rulerPointers.size===2){
-    if(R.touchA0!==null){R.angle=R.touchR0+(twoAngleMap(rulerPointers)-R.touchA0);drawRulerOverlay();}return;
+    if(R.touchA0!==null){R.angle=R.touchR0+(twoAngleMap(rulerPointers)-R.touchA0);drawRulerOverlay();updateRotVal();}return;
   }
   const{x,y}=getOvXY(e,RC);
   if(R.drag==='ruler'){R.pos={x:x-R.dragOff.x,y:y-R.dragOff.y};drawRulerOverlay();}
@@ -959,7 +1003,29 @@ function drawCompassPencil(tip){
   cCtx.beginPath();cCtx.arc(pTip.x,pTip.y,tipR,0,Math.PI*2);cCtx.fill();cCtx.restore();
 }
 
-// ── Compass events ──
+// also catch second finger that lands outside CC (on wrap/inner)
+wrap.addEventListener('pointerdown', e=>{
+  if(mode!=='compass') return;
+  zPtrs.delete(e.pointerId); // prevent zoom from stealing this pointer
+  if(compassPointers.has(e.pointerId)) return;
+  compassPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(compassPointers.size===2){
+    const a=twoAngleMap(compassPointers);C.touchA0=a;C.touchN0=C.needle;C.touchP0=C.pencil;
+  }
+},{passive:false});
+wrap.addEventListener('pointermove', e=>{
+  if(mode!=='compass'||!compassPointers.has(e.pointerId)) return;
+  compassPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(compassPointers.size===2&&C.touchA0!==null){
+    const d=twoAngleMap(compassPointers)-C.touchA0;
+    C.needle=C.touchN0+d;C.pencil=C.touchP0+d;drawCompassOverlay();
+  }
+},{passive:false});
+wrap.addEventListener('pointerup', e=>{
+  if(mode!=='compass') return;
+  compassPointers.delete(e.pointerId);
+  if(compassPointers.size<2) C.touchA0=null;
+},{passive:false});
 const compassPointers=new Map();
 CC.addEventListener('pointerdown',onCompassDown,{passive:false});
 CC.addEventListener('pointermove',onCompassMove,{passive:false});
@@ -1411,6 +1477,8 @@ function layout(){
     if(!window._layoutDone) restoreAutosave();
   }
   if(!window._layoutDone) window._layoutDone=true;
+  if(RC.style.display!=='none'){RC.width=W;RC.height=H;}
+  if(CC.style.display!=='none'){CC.width=W;CC.height=H;}
   if(selRect||lassoPoints) drawSelOverlay();
   else drawGuideLines();
   if(piece) redrawPiece();
@@ -1541,11 +1609,13 @@ function setMode(m){
   if(cCtrl) cCtrl.style.display=m==='compass'?'flex':'none';
   if(m==='ruler'){
     RC.width=wrap.clientWidth;RC.height=wrap.clientHeight;
+    zPtrs.clear(); zPinching=false; // release zoom
     resetRuler();drawRulerOverlay();
     showToast('📏 גרור הסרגל • 2 אצבעות לסיבוב • לחץ עיפרון לציור');
   }
   if(m==='compass'){
     CC.width=wrap.clientWidth;CC.height=wrap.clientHeight;
+    zPtrs.clear(); zPinching=false; // release zoom
     resetCompass();drawCompassOverlay();
     showToast('🔵 גרור המחוגה • לחץ "הצמד חוד" לקיבוע');
   }
@@ -1561,6 +1631,12 @@ function setMode(m){
   document.getElementById('naturalIntensity').style.display=showNaturalFlex;
   document.getElementById('naturalVal').style.display=showNaturalFlex;
   if(m!=='eraser') hideEraserCursor();
+  // show/hide rotation controls for ruler/compass
+  const showRot=m==='ruler'||m==='compass';
+  ['rotSep','rotLabel','rotMinus','rotVal','rotPlus'].forEach(id=>{
+    document.getElementById(id).style.display=showRot?'':'none';
+  });
+  if(showRot) updateRotVal();
 }
 
 // ── COLOR / THICKNESS / FONT ──
@@ -2550,6 +2626,25 @@ function rotatePiece(deg){
   redrawPiece();
 }
 
+function updateRotVal(){
+  const deg=mode==='ruler'
+    ? Math.round(((R.angle*180/Math.PI)%360+360)%360)
+    : Math.round(((C.needle*180/Math.PI)%360+360)%360);
+  const el=document.getElementById('rotVal');
+  if(el) el.textContent=deg+'°';
+}
+function rotateToolBy(deg){
+  const rad=deg*Math.PI/180;
+  if(mode==='ruler'){
+    R.angle+=rad;
+    drawRulerOverlay();
+  } else if(mode==='compass'){
+    C.needle+=rad; C.pencil+=rad;
+    drawCompassOverlay();
+  }
+  updateRotVal();
+}
+
 function updateAngleBadge(){
   const badge=document.getElementById('angleBadge');
   if(!piece){ badge.style.display='none'; return; }
@@ -2905,6 +3000,83 @@ function clearAll(){
 }
 
 // ── PUZZLE ──
+function toggleHelp(){
+  const p=document.getElementById('helpPanel');
+  if(p.style.display==='none'){
+    p.style.display='block';
+    document.getElementById('helpContent').innerHTML=buildHelp();
+  } else {
+    p.style.display='none';
+  }
+}
+
+function buildHelp(){
+  const sec=(title,items)=>`
+    <div style="margin-bottom:20px;">
+      <h3 style="color:#4caf50;font-size:15px;margin:0 0 8px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;">${title}</h3>
+      ${items.map(([icon,name,desc])=>`
+        <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px;">
+          <span style="font-size:20px;min-width:30px;text-align:center;">${icon}</span>
+          <div><strong style="color:#fff;font-size:13px;">${name}</strong><br>
+          <span style="color:#aaa;font-size:12px;">${desc}</span></div>
+        </div>`).join('')}
+    </div>`;
+
+  return sec('🎨 כלי ציור',[
+    ['✏️','ציור','ציור חופשי עם האצבע. עובי נשלט ע"י + ו- בסרגל.'],
+    ['🎨','מברשת','ציור בגוונים אקראיים של הצבע הנבחר + מריחה. שלוט עם סליידר עוצמה.'],
+    ['🧹','מחק','מוחק ציור. עיגול אפור מציג את שטח המחיקה. עובי שולט בגודל.'],
+    ['🪣','מילוי','מילוי שטח סגור בצבע. עם מראה פעיל — ממלא גם בצד המשוקף.'],
+    ['🔤','טקסט','לחץ על הקנבס להוספת טקסט. גודל נשלט ע"י + ו-.'],
+  ])+
+  sec('📐 צורות וכלים',[
+    ['🔷','צורות','בחר צורה (קו, מלבן, עיגול, כוכב, לב, 3D...). בחר מילוי: ללא/מלא/קיווקוו.'],
+    ['⬚','מרובע','בחירת שטח מרובע לגזירה, העתקה או מחיקה.'],
+    ['🔆','לאסו','בחירת שטח חופשי.'],
+    ['📏','סרגל','גרור להזזה. 2 אצבעות לסיבוב. לחץ עיפרון להפעיל ציור קו ישר. הזווית מוצגת על הסרגל.'],
+    ['🔵','מחוגה','גרור להזזה. 2 אצבעות לסיבוב. לחץ "הצמד חוד" → קבע רדיוס → "התחל ציור" → גרור לקשת.'],
+  ])+
+  sec('🪄 פאנל בחירה (אחרי בחירת שטח)',[
+    ['✂️','גזור','מעביר את הבחירה לחתיכה מרחפת (ניתן להזזה).'],
+    ['📋','העתק','מעתיק את הבחירה לחתיכה מרחפת ומשאיר מקור.'],
+    ['🗑️','מחק','מוחק את תוכן הבחירה (לבן).'],
+    ['✕','בטל','מבטל את הבחירה.'],
+  ])+
+  sec('✏️ פאנל עריכה (אחרי גזירה/העתקה/הדבקה)',[
+    ['↔','רוחב','שנה רוחב החתיכה עם סליידר.'],
+    ['↕','גובה','שנה גובה החתיכה עם סליידר.'],
+    ['↻','סיבוב','סובב החתיכה 0°–360°.'],
+    ['⇄','היפוך אופקי','הפך אופקית — סליידר רציף (0%=מקורי, 100%=מראה).'],
+    ['⇵','היפוך אנכי','הפך אנכית — סליידר רציף.'],
+    ['⚡','מיזוג','בחר מצב מיזוג: רגיל / כפל / בהיר. מאפשר שקיפות ושיקוף.'],
+    ['⬜','שקיפות','שנה שקיפות החתיכה.'],
+    ['🔍','X-Ray','הצג בשקיפות למיקום מדויק.'],
+    ['📌','קבע','אפה את החתיכה לקנבס.'],
+    ['✕','בטל','החזר את החתיכה למיקום המקורי ואפה.'],
+    ['👁','הסתר/הצג פאנל','הסתר את פס האייקונים לראות את הקנבס.'],
+  ])+
+  sec('🎨 צבעים',[
+    ['🌈','בורר צבעים','לחץ על כדור הצבעים לבחירה מתקדמת (HSV) עם hex.'],
+    ['⬤','בחירת צבע מהר','לחץ על אחד מעיגולי הצבע בסרגל.'],
+  ])+
+  sec('🔧 פעולות כלליות',[
+    ['↔️','מראה X','שיקוף אופקי — הציור משוקף משמאל לימין בזמן אמת.'],
+    ['↕️','מראה Y','שיקוף אנכי.'],
+    ['↩️','בטל','בטל פעולה אחרונה.'],
+    ['↪️','שחזר','שחזר פעולה שבוטלה.'],
+    ['🖼️','הדבק','הדבק תמונה מהקליפבורד או מורכב פנימי.'],
+    ['💾','שמור','שמור את הציור כ-PNG. עם תיקייה מוגדרת — שומר ישר לשם.'],
+    ['📁','תיקייה','בחר תיקיית שמירה קבועה (MyPaintings וכו׳).'],
+    ['🗑️','נקה','מחק את כל הציור (עם אישור).'],
+    ['🧩','פאזל','המר את הציור לפאזל.'],
+  ])+
+  sec('👌 מחוות',[
+    ['👆','אצבע אחת','ציור / גרירה / בחירה.'],
+    ['✌️','שתי אצבעות','הגדלה/הקטנה של הציור (zoom לתוך הפיקסלים).'],
+    ['👆👆','הקשה כפולה','(בזום) אין אפקט — הזום נשמר בפיקסלים.'],
+  ]);
+}
+
 function openPuzzle(){
   const tmp=getFlatCanvas();
   localStorage.setItem('drawCanvas_image', tmp.toDataURL('image/png'));
@@ -2995,37 +3167,7 @@ document.body.addEventListener('touchmove', e=>{
   const manifestBlob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
   const manifestUrl = URL.createObjectURL(manifestBlob);
   document.getElementById('pwaManifest').href = manifestUrl;
-
-  // 2. Register service worker (inline as blob)
-  if('serviceWorker' in navigator){
-    const swCode = `
-const CACHE = 'draw-canvas-v1';
-self.addEventListener('install', e => {
-  self.skipWaiting();
-});
-self.addEventListener('activate', e => {
-  e.waitUntil(clients.claim());
-});
-self.addEventListener('fetch', e => {
-  // Cache-first for same-origin, network-only for others
-  if(e.request.url.startsWith(self.location.origin)){
-    e.respondWith(
-      caches.open(CACHE).then(cache =>
-        cache.match(e.request).then(cached =>
-          cached || fetch(e.request).then(resp => {
-            cache.put(e.request, resp.clone()); return resp;
-          })
-        )
-      )
-    );
-  }
-});`;
-    const swBlob = new Blob([swCode], {type:'application/javascript'});
-    const swUrl = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl, {scope:'/'})
-      .then(()=>console.log('SW registered'))
-      .catch(e=>console.log('SW failed:', e));
-  }
+  // Service Worker not supported from blob/file URLs — skipped
 })();
 
 </script>
