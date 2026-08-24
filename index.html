@@ -811,7 +811,38 @@ function drawRulerOverlay(){
   rCtx.restore();
 }
 
-// ── Ruler events ──
+// ── TOUCH-BASED TWO-FINGER ROTATION (mobile) ──
+function addTwoFingerRotation(canvas, onAngle){
+  let t0=null, t1=null, baseAngle=0, startAngle=0;
+  canvas.addEventListener('touchstart', e=>{
+    if(e.touches.length===2){
+      e.preventDefault();
+      t0={x:e.touches[0].clientX, y:e.touches[0].clientY};
+      t1={x:e.touches[1].clientX, y:e.touches[1].clientY};
+      startAngle=Math.atan2(t1.y-t0.y, t1.x-t0.x);
+      baseAngle=onAngle('get');
+    }
+  },{passive:false});
+  canvas.addEventListener('touchmove', e=>{
+    if(e.touches.length===2){
+      e.preventDefault();
+      const a={x:e.touches[0].clientX, y:e.touches[0].clientY};
+      const b={x:e.touches[1].clientX, y:e.touches[1].clientY};
+      const curAngle=Math.atan2(b.y-a.y, b.x-a.x);
+      onAngle('set', baseAngle+(curAngle-startAngle));
+    }
+  },{passive:false});
+  canvas.addEventListener('touchend', e=>{ t0=null; t1=null; },{passive:true});
+}
+
+addTwoFingerRotation(RC, (op,val)=>{
+  if(op==='get') return R.angle;
+  R.angle=val; drawRulerOverlay(); updateRotVal();
+});
+addTwoFingerRotation(CC, (op,val)=>{
+  if(op==='get') return C.needle;
+  const d=val-C.needle; C.needle=val; C.pencil+=d; drawCompassOverlay(); updateRotVal();
+});
 const rulerPointers=new Map();
 RC.addEventListener('pointerdown',onRulerDown,{passive:false});
 RC.addEventListener('pointermove',onRulerMove,{passive:false});
@@ -2966,19 +2997,38 @@ async function saveImage(filename){
 }
 
 async function downloadCanvas(){
-  const now=new Date(), pad=n=>String(n).padStart(2,'0');
-  const def=`ציור_${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}.png`;
+  const key='drawCanvas_paintingNum';
+  let num=parseInt(localStorage.getItem(key)||'0')+1;
+  const def=`ציור ${num}`;
   const inp=prompt('שם הקובץ:', def);
   if(inp===null) return;
-  const filename=(inp.trim()||'ציור').replace(/[\\/:*?"<>|]/g,'_');
+  const chosen=inp.trim()||def;
+  // advance counter only if name starts with "ציור <num>"
+  if(new RegExp(`^ציור\\s+${num}(\\s|$)`).test(chosen)){
+    localStorage.setItem(key, num);
+  }
+  const filename=chosen.replace(/[\\/:*?"<>|]/g,'_');
   const fn=filename.endsWith('.png')?filename:filename+'.png';
   await saveImage(fn);
 }
 
 // ── CLEAR ──
 function clearAll(){
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML=`<div style="background:#16213e;border:2px solid #e94560;border-radius:16px;padding:24px 28px;text-align:center;font-family:Heebo,sans-serif;color:#fff;direction:rtl;">
+    <div style="font-size:16px;margin-bottom:20px;">למחוק את כל הציור?</div>
+    <div style="display:flex;gap:12px;justify-content:center;">
+      <button id="clearYes" style="background:#e94560;border:none;color:#fff;padding:10px 24px;border-radius:10px;font-size:15px;cursor:pointer;font-family:Heebo,sans-serif;">מחק</button>
+      <button id="clearNo" style="background:#0f3460;border:1.5px solid #2a2a4a;color:#fff;padding:10px 24px;border-radius:10px;font-size:15px;cursor:pointer;font-family:Heebo,sans-serif;">בטל</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#clearNo').onclick=()=>document.body.removeChild(overlay);
+  overlay.querySelector('#clearYes').onclick=()=>{ document.body.removeChild(overlay); _doClearAll(); };
+}
+function _doClearAll(){
   const savedPiece=piece;
-  showToast('🔍 clearAll נקרא, piece='+(piece?'יש':'אין'));
   clearSel();
   if(piece){piece=null;pCtx.clearRect(0,0,PC.width,PC.height);PC.style.display='none';hidePieceEditUI();}
   undoStack=[];redoStack=[];
@@ -2993,7 +3043,7 @@ function clearAll(){
     PC.style.pointerEvents='auto';
     redrawPiece();
     showPieceBar();
-    showToast('🗑️ נוקה — piece נשמר');
+    showToast('🗑️ נוקה');
   } else {
     showToast('🗑️ נוקה');
   }
