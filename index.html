@@ -368,6 +368,7 @@ body{ position:fixed; overflow:hidden; }
 <div id="canvasWrap">
   <div id="canvasInner" style="position:absolute;top:0;left:0;transform-origin:0 0;width:100%;height:100%;">
     <canvas id="mainCanvas"></canvas>
+
     <canvas id="selCanvas"></canvas>
     <canvas id="pieceCanvas"></canvas>
   </div>
@@ -549,7 +550,6 @@ body{ position:fixed; overflow:hidden; }
   <button class="tool-btn" onclick="toggleHelp()"><span class="icon">❓</span><span class="lbl">עזרה</span></button>
 </div>
 
-<!-- HELP PANEL -->
 <div id="helpPanel" style="display:none;position:fixed;z-index:80;top:0;left:0;right:0;bottom:0;
   background:rgba(10,10,30,0.96);overflow-y:auto;-webkit-overflow-scrolling:touch;
   font-family:'Heebo',sans-serif;color:#e0e0ff;direction:rtl;padding:16px 16px 80px;">
@@ -1503,10 +1503,7 @@ function layout(){
   MC.width=SC.width=PC.width=W;
   MC.height=SC.height=PC.height=H;
   if(saved) try{ctx.putImageData(saved,0,0);}catch(e){}
-  else {
-    initWhite();
-    if(!window._layoutDone) restoreAutosave();
-  }
+  else { initWhite(); }
   if(!window._layoutDone) window._layoutDone=true;
   if(RC.style.display!=='none'){RC.width=W;RC.height=H;}
   if(CC.style.display!=='none'){CC.width=W;CC.height=H;}
@@ -1564,37 +1561,10 @@ function dbGet(key){
 }
 
 let _autosaveTimer=null;
-function autosave(){
-  clearTimeout(_autosaveTimer);
-  _autosaveTimer=setTimeout(()=>{
-    try{
-      const tmp=document.createElement('canvas');
-      tmp.width=MC.width; tmp.height=MC.height;
-      const tc=tmp.getContext('2d');
-      tc.fillStyle='#fff'; tc.fillRect(0,0,tmp.width,tmp.height);
-      tc.drawImage(MC,0,0);
-      const data=tmp.toDataURL('image/jpeg',0.75);
-      dbSet('ציור_autosave', data).then(()=>{
-        const ind=document.getElementById('saveInd');
-        if(ind){ind.style.opacity='1';setTimeout(()=>ind.style.opacity='0',1200);}
-      }).catch(e=>showToast('⚠️ שמירה נכשלה: '+e));
-    }catch(e){showToast('⚠️ '+e.message);}
-  }, 2000);
-}
-
-function restoreAutosave(){
-  dbGet('ציור_autosave').then(data=>{
-    if(!data) return;
-    const img=new Image();
-    img.onload=()=>{
-      setTimeout(()=>{
-        ctx.drawImage(img,0,0,MC.width,MC.height);
-        showToast('↩ הציור שוחזר');
-      },150);
-    };
-    img.src=data;
-  }).catch(()=>{});
-}
+function autosave(){ /* autosave disabled */ }
+function restoreAutosave(){ /* autosave disabled */ }
+// clear any old autosave from IndexedDB
+dbSet('ציור_autosave','').catch(()=>{});
 window.addEventListener('resize',()=>setTimeout(layout,100));
 window.addEventListener('orientationchange',()=>setTimeout(layout,300));
 layout();
@@ -1768,16 +1738,18 @@ function mirrorPoints(x, y){
 
 // draw a dot at all mirror positions
 function mirrorDot(x, y, r){
+  const dc=getCtx();
   mirrorPoints(x,y).forEach(p=>{
-    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();
+    dc.beginPath();dc.arc(p.x,p.y,r,0,Math.PI*2);dc.fill();
   });
 }
 
 // draw a line segment at all mirror positions
 function mirrorLine(x0,y0,x1,y1){
+  const dc=getCtx();
   mirrorPoints(x0,y0).forEach((p,i)=>{
     const q=mirrorPoints(x1,y1)[i];
-    ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
+    dc.beginPath();dc.moveTo(p.x,p.y);dc.lineTo(q.x,q.y);dc.stroke();
   });
 }
 
@@ -1788,6 +1760,8 @@ MC.addEventListener('pointerdown',onDown,{passive:false});
 MC.addEventListener('pointermove',onMove,{passive:false});
 MC.addEventListener('pointerup',  onUp,  {passive:false});
 MC.addEventListener('pointercancel',()=>{drawing=false;selStart=null;},{passive:false});
+// Active drawing context
+function getCtx(){ return ctx; }
 
 // ── NATURAL BRUSH (color variation + smudge) ──
 function hexToHsl(hex){
@@ -1903,23 +1877,23 @@ function onDown(e){
   if(mode==='shape'){
     const[x,y]=getPos(e);
     saveHistory();shapeStart={x,y};
-    MC.setPointerCapture(e.pointerId);
+    try{MC.setPointerCapture(e.pointerId);}catch(ex){}
     return;
   }
-  MC.setPointerCapture(e.pointerId);
+  try{MC.setPointerCapture(e.pointerId);}catch(ex){}
   saveHistory();drawing=true;
   [lastX,lastY]=getPos(e);
   if(mode==='eraser') drawEraserDot(lastX,lastY);
-  // dot drawn in onMove instead of here, so pinch cancellation is clean
 }
 
 function onMove(e){
   e.preventDefault();
   if(mode==='zoom') return;
   if(mode==='rect'||mode==='lasso'){updateSel(e);return;}
+  const dc=getCtx(); // drawing context
   if(mode==='shape'&&shapeStart){
     const[x,y]=getPos(e);
-    ctx.putImageData(undoStack[undoStack.length-1],0,0);
+    dc.putImageData(undoStack[undoStack.length-1],0,0);
     drawShape(shapeStart.x,shapeStart.y,x,y,false);
     return;
   }
@@ -1931,15 +1905,15 @@ function onMove(e){
     [lastX,lastY]=[x,y];
     return;
   }
-  ctx.lineCap='round';ctx.lineJoin='round';
+  dc.lineCap='round';dc.lineJoin='round';
   if(mode==='eraser'){
-    ctx.strokeStyle='#fff';ctx.lineWidth=thickness*8;
+    dc.strokeStyle='#fff';dc.lineWidth=thickness*8;
     mirrorLine(lastX,lastY,x,y);
     drawEraserDot(x,y);
     [lastX,lastY]=[x,y];
     return;
   }
-  ctx.strokeStyle=color;ctx.lineWidth=thickness;
+  dc.strokeStyle=color;dc.lineWidth=thickness;
   mirrorLine(lastX,lastY,x,y);
   [lastX,lastY]=[x,y];
 }
@@ -2997,16 +2971,12 @@ async function saveImage(filename){
 }
 
 async function downloadCanvas(){
-  const key='drawCanvas_paintingNum';
-  let num=parseInt(localStorage.getItem(key)||'0')+1;
-  const def=`ציור ${num}`;
+  const now=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  const def=`ציור ${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}-${pad(now.getMinutes())}`;
   const inp=prompt('שם הקובץ:', def);
   if(inp===null) return;
   const chosen=inp.trim()||def;
-  // advance counter only if name starts with "ציור <num>"
-  if(new RegExp(`^ציור\\s+${num}(\\s|$)`).test(chosen)){
-    localStorage.setItem(key, num);
-  }
   const filename=chosen.replace(/[\\/:*?"<>|]/g,'_');
   const fn=filename.endsWith('.png')?filename:filename+'.png';
   await saveImage(fn);
@@ -3071,62 +3041,62 @@ function buildHelp(){
           <span style="color:#aaa;font-size:12px;">${desc}</span></div>
         </div>`).join('')}
     </div>`;
-
   return sec('🎨 כלי ציור',[
-    ['✏️','ציור','ציור חופשי עם האצבע. עובי נשלט ע"י + ו- בסרגל.'],
-    ['🎨','מברשת','ציור בגוונים אקראיים של הצבע הנבחר + מריחה. שלוט עם סליידר עוצמה.'],
+    ['✏️','ציור','ציור חופשי. עובי נשלט ע"י + ו- בסרגל העליון.'],
+    ['🎨','מברשת','ציור בגוונים אקראיים של הצבע הנבחר + מריחה. סליידר עוצמה מופיע בסרגל העליון.'],
     ['🧹','מחק','מוחק ציור. עיגול אפור מציג את שטח המחיקה. עובי שולט בגודל.'],
     ['🪣','מילוי','מילוי שטח סגור בצבע. עם מראה פעיל — ממלא גם בצד המשוקף.'],
-    ['🔤','טקסט','לחץ על הקנבס להוספת טקסט. גודל נשלט ע"י + ו-.'],
+    ['🔤','טקסט','לחץ על הקנבס להוספת טקסט. גודל נשלט ע"י + ו- בסרגל העליון.'],
   ])+
   sec('📐 צורות וכלים',[
-    ['🔷','צורות','בחר צורה (קו, מלבן, עיגול, כוכב, לב, 3D...). בחר מילוי: ללא/מלא/קיווקוו.'],
+    ['🔷','צורות','בחר צורה (קו, מלבן, עיגול, כוכב, לב, 3D...). מילוי: ללא/מלא/קיווקוו. ניתן לגרור את הפאנל.'],
     ['⬚','מרובע','בחירת שטח מרובע לגזירה, העתקה או מחיקה.'],
     ['🔆','לאסו','בחירת שטח חופשי.'],
-    ['📏','סרגל','גרור להזזה. 2 אצבעות לסיבוב. לחץ עיפרון להפעיל ציור קו ישר. הזווית מוצגת על הסרגל.'],
-    ['🔵','מחוגה','גרור להזזה. 2 אצבעות לסיבוב. לחץ "הצמד חוד" → קבע רדיוס → "התחל ציור" → גרור לקשת.'],
+    ['📏','סרגל','גרור להזזה. 2 אצבעות לסיבוב (או +/- בסרגל העליון). לחץ עיפרון לציור קו ישר. הזווית מוצגת על הסרגל.'],
+    ['🔵','מחוגה','גרור להזזה. 2 אצבעות לסיבוב (או +/- בסרגל העליון). הצמד חוד → קבע רדיוס → התחל ציור → גרור לקשת.'],
   ])+
   sec('🪄 פאנל בחירה (אחרי בחירת שטח)',[
-    ['✂️','גזור','מעביר את הבחירה לחתיכה מרחפת (ניתן להזזה).'],
+    ['✂️','גזור','מעביר את הבחירה לחתיכה מרחפת.'],
     ['📋','העתק','מעתיק את הבחירה לחתיכה מרחפת ומשאיר מקור.'],
-    ['🗑️','מחק','מוחק את תוכן הבחירה (לבן).'],
+    ['🗑️','מחק','מוחק את תוכן הבחירה.'],
     ['✕','בטל','מבטל את הבחירה.'],
   ])+
   sec('✏️ פאנל עריכה (אחרי גזירה/העתקה/הדבקה)',[
-    ['↔','רוחב','שנה רוחב החתיכה עם סליידר.'],
-    ['↕','גובה','שנה גובה החתיכה עם סליידר.'],
-    ['↻','סיבוב','סובב החתיכה 0°–360°.'],
-    ['⇄','היפוך אופקי','הפך אופקית — סליידר רציף (0%=מקורי, 100%=מראה).'],
-    ['⇵','היפוך אנכי','הפך אנכית — סליידר רציף.'],
-    ['⚡','מיזוג','בחר מצב מיזוג: רגיל / כפל / בהיר. מאפשר שקיפות ושיקוף.'],
+    ['↔','רוחב','שנה רוחב החתיכה.'],
+    ['↕','גובה','שנה גובה החתיכה.'],
+    ['↻','סיבוב','סובב 0°–360°. הזווית מוצגת בפינה השמאלית העליונה.'],
+    ['⇄','היפוך אופקי','סליידר רציף — 0% מקורי, 100% מראה מלאה.'],
+    ['⇵','היפוך אנכי','סליידר רציף — 0% מקורי, 100% מראה מלאה.'],
+    ['⚡','מיזוג','מצב מיזוג: רגיל / כפל / בהיר.'],
     ['⬜','שקיפות','שנה שקיפות החתיכה.'],
     ['🔍','X-Ray','הצג בשקיפות למיקום מדויק.'],
+    ['👁','הסתר/הצג פאנל','מסתיר את פס האייקונים לראות את הקנבס.'],
     ['📌','קבע','אפה את החתיכה לקנבס.'],
-    ['✕','בטל','החזר את החתיכה למיקום המקורי ואפה.'],
-    ['👁','הסתר/הצג פאנל','הסתר את פס האייקונים לראות את הקנבס.'],
+    ['✕','בטל','החזר למיקום המקורי ואפה.'],
   ])+
   sec('🎨 צבעים',[
-    ['🌈','בורר צבעים','לחץ על כדור הצבעים לבחירה מתקדמת (HSV) עם hex.'],
-    ['⬤','בחירת צבע מהר','לחץ על אחד מעיגולי הצבע בסרגל.'],
+    ['🌈','בורר צבעים','לחץ על כדור הצבעים לבחירה מתקדמת (HSV) + hex.'],
+    ['⬤','צבע מהיר','לחץ על אחד מעיגולי הצבע בסרגל העליון.'],
   ])+
   sec('🔧 פעולות כלליות',[
-    ['↔️','מראה X','שיקוף אופקי — הציור משוקף משמאל לימין בזמן אמת.'],
-    ['↕️','מראה Y','שיקוף אנכי.'],
+    ['↔️','מראה X','שיקוף אופקי בזמן אמת. המילוי גם משתקף.'],
+    ['↕️','מראה Y','שיקוף אנכי בזמן אמת.'],
     ['↩️','בטל','בטל פעולה אחרונה.'],
     ['↪️','שחזר','שחזר פעולה שבוטלה.'],
-    ['🖼️','הדבק','הדבק תמונה מהקליפבורד או מורכב פנימי.'],
-    ['💾','שמור','שמור את הציור כ-PNG. עם תיקייה מוגדרת — שומר ישר לשם.'],
-    ['📁','תיקייה','בחר תיקיית שמירה קבועה (MyPaintings וכו׳).'],
-    ['🗑️','נקה','מחק את כל הציור (עם אישור).'],
+    ['🖼️','הדבק','הדבק תמונה מהקליפבורד, או קבע חתיכה מרחפת קיימת.'],
+    ['💾','שמור','שמור כ-PNG. ברירת מחדל: "ציור תאריך שעה". עם תיקייה מוגדרת — שומר ישירות לשם.'],
+    ['📁','תיקייה','בחר תיקיית שמירה קבועה (MyPaintings וכו\'). נזכרת בין סשנים.'],
+    ['🗑️','נקה','מחק את כל הציור (עם אישור בדיאלוג).'],
     ['🧩','פאזל','המר את הציור לפאזל.'],
+    ['❓','עזרה','מסך זה.'],
   ])+
   sec('👌 מחוות',[
     ['👆','אצבע אחת','ציור / גרירה / בחירה.'],
-    ['✌️','שתי אצבעות','הגדלה/הקטנה של הציור (zoom לתוך הפיקסלים).'],
-    ['👆👆','הקשה כפולה','(בזום) אין אפקט — הזום נשמר בפיקסלים.'],
+    ['✌️','שתי אצבעות','הגדלה/הקטנה וזיזה של הציור (zoom אמיתי לתוך הפיקסלים). לא פעיל בסרגל/מחוגה.'],
+    ['📏+✌️','סרגל — 2 אצבעות','סיבוב הסרגל. אפשר גם +/- בסרגל העליון (1° לכל לחיצה).'],
+    ['🔵+✌️','מחוגה — 2 אצבעות','סיבוב המחוגה. אפשר גם +/- בסרגל העליון.'],
   ]);
 }
-
 function openPuzzle(){
   const tmp=getFlatCanvas();
   localStorage.setItem('drawCanvas_image', tmp.toDataURL('image/png'));
