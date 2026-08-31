@@ -346,9 +346,13 @@ body{ position:fixed; overflow:hidden; }
   <!-- ruler/compass rotation controls -->
   <div class="sep" id="rotSep" style="display:none"></div>
   <span class="step-label" id="rotLabel" style="display:none">סיבוב</span>
-  <button class="step-btn" id="rotMinus" style="display:none" onclick="rotateToolBy(-1)">−</button>
+  <button class="step-btn" id="rotMinus" style="display:none" onclick="rotateToolBy(-0.5)">−</button>
   <span id="rotVal" style="display:none">0°</span>
-  <button class="step-btn" id="rotPlus"  style="display:none" onclick="rotateToolBy(1)">+</button>
+  <button class="step-btn" id="rotPlus"  style="display:none" onclick="rotateToolBy(0.5)">+</button>
+  <div class="sep" id="moveSep" style="display:none"></div>
+  <span class="step-label" id="moveLabel" style="display:none">הזזה</span>
+  <button class="step-btn" id="moveMinus" style="display:none" onclick="moveRulerPerp(-1)">−</button>
+  <button class="step-btn" id="movePlus"  style="display:none" onclick="moveRulerPerp(1)">+</button>
   <div class="sep"></div>
   <span class="step-label">טקסט</span>
   <button class="step-btn" onclick="changeFontSize(-2)">−</button>
@@ -720,7 +724,7 @@ const cCtx = CC.getContext('2d');
 // ══════════════════════════════════════
 //  RULER
 // ══════════════════════════════════════
-const RW=300, RH=38, PENCIL_OUT=10;
+const RW=300, RH=38, PENCIL_OUT=0; // tip now exactly on ruler edge
 let R={};
 function resetRuler(){
   R={pos:{x:wrap.clientWidth/2,y:wrap.clientHeight/2},angle:0,t:0.08,
@@ -1636,6 +1640,11 @@ function setMode(m){
   const showRot=m==='ruler'||m==='compass';
   ['rotSep','rotLabel','rotMinus','rotVal','rotPlus'].forEach(id=>{
     document.getElementById(id).style.display=showRot?'':'none';
+  });
+  // perpendicular move only for ruler
+  const showMove=m==='ruler';
+  ['moveSep','moveLabel','moveMinus','movePlus'].forEach(id=>{
+    document.getElementById(id).style.display=showMove?'':'none';
   });
   if(showRot) updateRotVal();
 }
@@ -2648,6 +2657,15 @@ function rotateToolBy(deg){
     drawCompassOverlay();
   }
   updateRotVal();
+}
+
+function moveRulerPerp(dir){
+  // 1/10 mm in pixels at 96dpi = 96/25.4/10
+  const step=96/25.4/10; // ≈ 0.378px
+  const{px,py}=rulerPerp();
+  R.pos.x+=px*step*dir;
+  R.pos.y+=py*step*dir;
+  drawRulerOverlay();
 }
 
 function updateAngleBadge(){
