@@ -339,7 +339,12 @@ body{ position:fixed; overflow:hidden; }
   <button class="step-btn" onclick="changeThickness(-1)">−</button>
   <span id="thickVal">4</span>
   <button class="step-btn" onclick="changeThickness(1)">+</button>
-  <div class="sep" id="naturalSep" style="display:none"></div>
+  <!-- polygon sides in top bar (shown only when polygon selected) -->
+  <div class="sep" id="polySep" style="display:none"></div>
+  <span class="step-label" id="polyLabel" style="display:none">צלעות</span>
+  <button class="step-btn" id="polyMinus" style="display:none" onclick="changePolySides(-1)">−</button>
+  <span id="polySidesVal" style="display:none;font-size:12px;color:var(--text);min-width:18px;text-align:center">5</span>
+  <button class="step-btn" id="polyPlus"  style="display:none" onclick="changePolySides(1)">+</button>
   <span class="step-label" id="naturalLabel" style="display:none">עוצמה</span>
   <input type="range" id="naturalIntensity" min="0" max="100" value="50" oninput="setNaturalIntensity(this.value)" style="display:none">
   <span id="naturalVal" style="display:none">50%</span>
@@ -441,6 +446,9 @@ body{ position:fixed; overflow:hidden; }
       <svg viewBox="0 0 24 24"><ellipse cx="12" cy="19" rx="9" ry="3"/><line x1="3" y1="19" x2="12" y2="3"/><line x1="21" y1="19" x2="12" y2="3"/></svg>חרוט</div>
     <div class="shape-opt" data-shape="pyramid"   onclick="pickShape('pyramid',this)">
       <svg viewBox="0 0 24 24"><polygon points="12,2 22,20 2,20"/><line x1="12" y1="2" x2="12" y2="20"/><line x1="7" y1="14" x2="17" y2="14"/></svg>פירמידה</div>
+    <!-- polygon -->
+    <div class="shape-opt" data-shape="polygon" onclick="pickShape('polygon',this)">
+      <svg viewBox="0 0 24 24"><polygon points="12,2 21,8 18,19 6,19 3,8"/></svg>מצולע</div>
   </div>
   <!-- Fill options -->
   <div id="fillOptions">
@@ -1422,8 +1430,15 @@ let mirrorH=false, mirrorV=false;
 
 // shape drawing
 let shapeType='line', shapeFill=false;
-let fillMode='none'; // 'none'|'solid'|'hatch'
+let fillMode='none';
 let hatchGapVal=10;
+let polySides=5;
+
+function changePolySides(d){
+  polySides=Math.max(3,Math.min(20,polySides+d));
+  const el=document.getElementById('polySidesVal');
+  if(el) el.textContent=polySides;
+}
 
 function setFillMode(m){
   fillMode=m; shapeFill=(m==='solid');
@@ -1481,6 +1496,11 @@ function pickShape(s,el){
   document.querySelectorAll('#shapePickerBody .shape-opt').forEach(o=>o.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('shapePicker').classList.remove('open');
+  // show polygon sides in top bar only for polygon
+  const showPoly=s==='polygon';
+  ['polySep','polyLabel','polyMinus','polySidesVal','polyPlus'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.style.display=showPoly?'':'none';
+  });
   setMode('shape');
 }
 document.addEventListener('pointerdown',e=>{
@@ -1636,6 +1656,9 @@ function setMode(m){
   document.getElementById('naturalIntensity').style.display=showNaturalFlex;
   document.getElementById('naturalVal').style.display=showNaturalFlex;
   if(m!=='eraser') hideEraserCursor();
+  if(m!=='shape')['polySep','polyLabel','polyMinus','polySidesVal','polyPlus'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.style.display='none';
+  });
   // show/hide rotation controls for ruler/compass
   const showRot=m==='ruler'||m==='compass';
   ['rotSep','rotLabel','rotMinus','rotVal','rotPlus'].forEach(id=>{
@@ -2037,6 +2060,20 @@ function drawShape(x0,y0,x1,y1,final){
         ctx.bezierCurveTo(hx-hw2*1.5,hy+hh*0.5, hx-hw2*1.8,hy-hh*0.2, hx,hy+hh*0.1);
         ctx.bezierCurveTo(hx+hw2*1.8,hy-hh*0.2, hx+hw2*1.5,hy+hh*0.5, hx,hy+hh);
         if(shapeFill)ctx.fill();ctx.stroke();break;}
+
+      case 'polygon':{
+        const pcx=(ax+bx)/2, pcy=(ay+by)/2;
+        const prx=Math.abs(bx-ax)/2, pry=Math.abs(by-ay)/2;
+        const n=polySides;
+        for(let i=0;i<n;i++){
+          const a=-Math.PI/2+i*2*Math.PI/n;
+          const px2=pcx+prx*Math.cos(a), py2=pcy+pry*Math.sin(a);
+          i===0?ctx.moveTo(px2,py2):ctx.lineTo(px2,py2);
+        }
+        ctx.closePath();
+        if(fillMode==='solid')ctx.fill();
+        if(fillMode==='hatch')ctx.setLineDash([hatchGapVal,hatchGapVal]);
+        ctx.stroke();ctx.setLineDash([]);break;}
 
       case 'cube':{
         const W=Math.abs(bx-ax),H=Math.abs(by-ay);
