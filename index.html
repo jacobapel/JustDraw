@@ -1651,23 +1651,24 @@ function setMode(m){
   // show/hide natural brush intensity controls
   const showNatural = m==='natural' ? 'inline-block' : 'none';
   const showNaturalFlex = m==='natural' ? '' : 'none';
-  document.getElementById('naturalSep').style.display=showNaturalFlex;
-  document.getElementById('naturalLabel').style.display=showNaturalFlex;
-  document.getElementById('naturalIntensity').style.display=showNaturalFlex;
-  document.getElementById('naturalVal').style.display=showNaturalFlex;
+  ['naturalSep','naturalLabel','naturalIntensity','naturalVal'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.style.display=showNaturalFlex;
+  });
   if(m!=='eraser') hideEraserCursor();
   if(m!=='shape')['polySep','polyLabel','polyMinus','polySidesVal','polyPlus'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.style.display='none';
   });
   // show/hide rotation controls for ruler/compass
   const showRot=m==='ruler'||m==='compass';
-  ['rotSep','rotLabel','rotMinus','rotVal','rotPlus'].forEach(id=>{
-    document.getElementById(id).style.display=showRot?'':'none';
+  const rotIds={rotSep:'block',rotLabel:'inline',rotMinus:'inline-block',rotVal:'inline',rotPlus:'inline-block'};
+  Object.entries(rotIds).forEach(([id,disp])=>{
+    const el=document.getElementById(id); if(el) el.style.display=showRot?disp:'none';
   });
   // perpendicular move only for ruler
   const showMove=m==='ruler';
-  ['moveSep','moveLabel','moveMinus','movePlus'].forEach(id=>{
-    document.getElementById(id).style.display=showMove?'':'none';
+  const moveIds={moveSep:'block',moveLabel:'inline',moveMinus:'inline-block',movePlus:'inline-block'};
+  Object.entries(moveIds).forEach(([id,disp])=>{
+    const el=document.getElementById(id); if(el) el.style.display=showMove?disp:'none';
   });
   if(showRot) updateRotVal();
 }
@@ -2678,11 +2679,12 @@ function rotatePiece(deg){
 }
 
 function updateRotVal(){
+  const el=document.getElementById('rotVal');
+  if(!el) return;
   const deg=mode==='ruler'
     ? Math.round(((R.angle*180/Math.PI)%360+360)%360)
     : Math.round(((C.needle*180/Math.PI)%360+360)%360);
-  const el=document.getElementById('rotVal');
-  if(el) el.textContent=deg+'°';
+  el.textContent=deg+'°';
 }
 function rotateToolBy(deg){
   const rad=deg*Math.PI/180;
