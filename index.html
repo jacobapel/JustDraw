@@ -479,6 +479,8 @@ body{ position:fixed; overflow:hidden; }
       <div class="ss"></div>
       <button onclick="copyPiece()"><span class="icon">📋</span>העתק</button>
       <div class="ss"></div>
+      <button onclick="eyedropFromSelection()"><span class="icon">💉</span>טפטפת</button>
+      <div class="ss"></div>
       <button class="dng" onclick="deleteSel()"><span class="icon">🗑️</span>מחק</button>
       <div class="ss"></div>
       <button onclick="clearSel()"><span class="icon">✕</span>בטל</button>
@@ -520,6 +522,9 @@ body{ position:fixed; overflow:hidden; }
   </button>
   <button class="tool-btn" id="btnFill"  onclick="setMode('fill')">
     <span class="icon">🪣</span><span class="lbl">מילוי</span>
+  </button>
+  <button class="tool-btn" id="btnEyedrop" onclick="setMode('eyedrop')">
+    <span class="icon">💉</span><span class="lbl">טפטפת</span>
   </button>
   <button class="tool-btn" id="btnText"  onclick="setMode('text')">
     <span class="icon">🔤</span><span class="lbl">טקסט</span>
@@ -1626,7 +1631,7 @@ function setMode(m){
   if(piece) stampPiece();
   mode=m;
   MC.style.pointerEvents=(m==='ruler'||m==='compass'||m==='zoom')?'none':'auto';
-  MC.style.cursor={draw:'crosshair',eraser:'cell',fill:'crosshair',text:'text',rect:'crosshair',lasso:'crosshair',shape:'crosshair',ruler:'default',compass:'default',natural:'crosshair',zoom:'move'}[m]||'crosshair';
+  MC.style.cursor={draw:'crosshair',eraser:'cell',fill:'crosshair',text:'text',rect:'crosshair',lasso:'crosshair',shape:'crosshair',ruler:'default',compass:'default',natural:'crosshair',zoom:'move',eyedrop:'crosshair'}[m]||'crosshair';
   // show/hide overlay canvases and compass controls
   RC.style.display=m==='ruler'?'block':'none';
   CC.style.display=m==='compass'?'block':'none';
@@ -1645,7 +1650,7 @@ function setMode(m){
     showToast('🔵 גרור המחוגה • לחץ "הצמד חוד" לקיבוע');
   }
   document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
-  const idMap={draw:'btnDraw',eraser:'btnErase',fill:'btnFill',text:'btnText',rect:'btnRect',lasso:'btnLasso',shape:'btnShape',ruler:'btnRuler',compass:'btnCompass',natural:'btnNatural'};
+  const idMap={draw:'btnDraw',eraser:'btnErase',fill:'btnFill',text:'btnText',rect:'btnRect',lasso:'btnLasso',shape:'btnShape',ruler:'btnRuler',compass:'btnCompass',natural:'btnNatural',eyedrop:'btnEyedrop'};
   const el=document.getElementById(idMap[m]);
   if(el) el.classList.add('active');
   // show/hide natural brush intensity controls
@@ -1676,6 +1681,47 @@ function setMode(m){
 // ── COLOR / THICKNESS / FONT ──
 function setColor(c){color=c;document.getElementById('colorPicker').value=c;}
 function setSwatch(el){document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));el.classList.add('active');setColor(el.dataset.color);}
+
+function setColorFromHex(hex){
+  color=hex;
+  // update color picker value
+  try{document.getElementById('colorPicker').value=hex;}catch(e){}
+  // deselect swatches
+  document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));
+  showToast('💉 צבע נבחר: '+hex);
+}
+
+// dominant color from a region using median cut approximation (bucket by 32)
+function dominantColorFromRegion(x0,y0,w,h){
+  const data=ctx.getImageData(x0,y0,w,h).data;
+  const buckets={};
+  for(let i=0;i<data.length;i+=4){
+    if(data[i+3]<128) continue;
+    const r=data[i]>>5, g=data[i+1]>>5, b=data[i+2]>>5;
+    const k=(r<<6)|(g<<3)|b;
+    buckets[k]=(buckets[k]||0)+1;
+  }
+  let best=0, bestK=0;
+  for(const k in buckets) if(buckets[k]>best){best=buckets[k];bestK=+k;}
+  const r=((bestK>>6)&7)<<5|16;
+  const g=((bestK>>3)&7)<<5|16;
+  const b=(bestK&7)<<5|16;
+  return '#'+[r,g,b].map(v=>Math.min(255,v).toString(16).padStart(2,'0')).join('');
+}
+
+// eyedrop from current selection
+function eyedropFromSelection(){
+  if(!selRect) return;
+  const x=Math.max(0,Math.round(selRect.x));
+  const y=Math.max(0,Math.round(selRect.y));
+  const w=Math.min(Math.round(selRect.w),MC.width-x);
+  const h=Math.min(Math.round(selRect.h),MC.height-y);
+  if(w<1||h<1) return;
+  const hex=dominantColorFromRegion(x,y,w,h);
+  setColorFromHex(hex);
+  clearSel();
+  setMode('draw');
+}
 function setThickness(v){
   thickness=Math.max(1,Math.min(40,+v));
   document.getElementById('thickVal').textContent=thickness;
@@ -1905,6 +1951,18 @@ function onDown(e){
   if(piece && activePieceControl) closePieceControlRow();
   if(mode==='text'){handleTextClick(e);return;}
   if(mode==='move') return;
+  if(mode==='eyedrop'){
+    const[x,y]=getPos(e);
+    // sample single pixel immediately on tap
+    const px=Math.round(x), py=Math.round(y);
+    if(px>=0&&py>=0&&px<MC.width&&py<MC.height){
+      const d=ctx.getImageData(px,py,1,1).data;
+      const hex='#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join('');
+      setColorFromHex(hex);
+      showToast('💉 '+hex);
+    }
+    return;
+  }
   if(mode==='fill'){saveHistory();floodFill(e);return;}
   if(mode==='rect'||mode==='lasso'){startSel(e);return;}
   if(mode==='shape'){
