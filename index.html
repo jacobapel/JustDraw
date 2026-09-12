@@ -523,9 +523,6 @@ body{ position:fixed; overflow:hidden; }
   <button class="tool-btn" id="btnFill"  onclick="setMode('fill')">
     <span class="icon">🪣</span><span class="lbl">מילוי</span>
   </button>
-  <button class="tool-btn" id="btnEyedrop" onclick="setMode('eyedrop')">
-    <span class="icon">💉</span><span class="lbl">טפטפת</span>
-  </button>
   <button class="tool-btn" id="btnText"  onclick="setMode('text')">
     <span class="icon">🔤</span><span class="lbl">טקסט</span>
   </button>
@@ -1691,22 +1688,17 @@ function setColorFromHex(hex){
   showToast('💉 צבע נבחר: '+hex);
 }
 
-// dominant color from a region using median cut approximation (bucket by 32)
+// weighted average color from region
 function dominantColorFromRegion(x0,y0,w,h){
   const data=ctx.getImageData(x0,y0,w,h).data;
-  const buckets={};
+  let r=0,g=0,b=0,n=0;
   for(let i=0;i<data.length;i+=4){
     if(data[i+3]<128) continue;
-    const r=data[i]>>5, g=data[i+1]>>5, b=data[i+2]>>5;
-    const k=(r<<6)|(g<<3)|b;
-    buckets[k]=(buckets[k]||0)+1;
+    r+=data[i]; g+=data[i+1]; b+=data[i+2]; n++;
   }
-  let best=0, bestK=0;
-  for(const k in buckets) if(buckets[k]>best){best=buckets[k];bestK=+k;}
-  const r=((bestK>>6)&7)<<5|16;
-  const g=((bestK>>3)&7)<<5|16;
-  const b=(bestK&7)<<5|16;
-  return '#'+[r,g,b].map(v=>Math.min(255,v).toString(16).padStart(2,'0')).join('');
+  if(!n) return color;
+  return '#'+[Math.round(r/n),Math.round(g/n),Math.round(b/n)]
+    .map(v=>v.toString(16).padStart(2,'0')).join('');
 }
 
 // eyedrop from current selection
