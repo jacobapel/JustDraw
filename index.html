@@ -363,6 +363,8 @@ body{ position:fixed; overflow:hidden; }
   <div class="sep" id="scatterSep3" style="display:none"></div>
   <button class="step-btn" id="scatterFillBtn" style="display:none;min-width:36px" onclick="toggleScatterFill()">●</button>
   <button class="step-btn" id="scatterObjBtn"  style="display:none;min-width:36px" onclick="toggleScatterObj()">⬤</button>
+  <button class="step-btn" id="scatterBorderBtn" style="display:none;min-width:50px" onclick="eraseScatterBorder()" title="מחק מסגרת">🗑🔲</button>
+  <button class="step-btn" id="scatterMarkBtn" style="display:none;min-width:36px" title="סמן לפני מחיקת מסגרת" onclick="markScatterCheckpoint()">📍</button>
   <input type="file" id="scatterFileInput" accept="image/*" style="display:none" onchange="loadScatterObj(this)">
   <span class="step-label" id="rotLabel" style="display:none">סיבוב</span>
   <button class="step-btn" id="rotMinus" style="display:none" onclick="rotateToolBy(-0.5)">−</button>
@@ -1689,7 +1691,7 @@ function setMode(m){
   const showScatter=m==='scatter';
   ['scatterSep','scatterLabel','scatterCountMinus','scatterCountVal','scatterCountPlus',
    'scatterSep2','scatterSizeLabel','scatterSizeMinus','scatterSizeVal','scatterSizePlus',
-   'scatterSep3','scatterFillBtn','scatterObjBtn'].forEach(id=>{
+   'scatterSep3','scatterFillBtn','scatterObjBtn','scatterBorderBtn','scatterMarkBtn'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.style.display=showScatter?'inline-block':'none';
   });
   // show/hide rotation controls for ruler/compass
@@ -3178,6 +3180,43 @@ let scatterCount=1, scatterSize=8;
 let scatterFilled=true;
 let scatterUseObj=false;
 let scatterObj=null;
+let scatterRemoveBorder=false;
+let scatterCheckpoint=null; // snapshot before border
+
+function markScatterCheckpoint(){
+  scatterCheckpoint=ctx.getImageData(0,0,MC.width,MC.height);
+  scatterAllPlaced=[];
+  const b=document.getElementById('scatterMarkBtn');
+  if(b){b.textContent='📍✓';b.style.color='#4caf50';}
+  showToast('📍 נקודה סומנה — עכשיו צייר את המסגרת');
+}
+
+let scatterAllPlaced=[]; // accumulate all placed items
+
+function eraseScatterBorder(){
+  if(!scatterCheckpoint){showToast('⚠️ לחץ 📍 לפני ציור המסגרת');return;}
+  saveHistory();
+  // restore to pre-border state
+  ctx.putImageData(scatterCheckpoint,0,0);
+  // redraw all accumulated dots/objects
+  ctx.fillStyle=color; ctx.strokeStyle=color; ctx.lineWidth=1;
+  scatterAllPlaced.forEach(({px,py,drawR,rot,col,filled,obj})=>{
+    ctx.fillStyle=col; ctx.strokeStyle=col;
+    if(obj){
+      ctx.save(); ctx.translate(px,py); ctx.rotate(rot);
+      ctx.drawImage(obj,-drawR,-drawR,drawR*2,drawR*2);
+      ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(px,py,drawR,0,Math.PI*2);
+      if(filled) ctx.fill(); else ctx.stroke();
+    }
+  });
+  scatterCheckpoint=null;
+  scatterAllPlaced=[];
+  const b=document.getElementById('scatterMarkBtn');
+  if(b){b.textContent='📍';b.style.color='';}
+  showToast('🗑 מסגרת הוסרה');
+}
 
 function changeScatter(type,d){
   if(type==='count') scatterCount=Math.max(1,scatterCount+d);
@@ -3216,23 +3255,24 @@ function loadScatterObj(input){
 }
 
 function doScatterFill(cx,cy){
+  // snapshot inkCanvas BEFORE drawing dots (for border removal)
   iCtx.clearRect(0,0,IKC.width,IKC.height);
   iCtx.fillStyle='#fff'; iCtx.fillRect(0,0,IKC.width,IKC.height);
   iCtx.drawImage(MC,0,0);
   const mask=radiantFloodFill(cx,cy);
   if(!mask){showToast('⚠️ גע בתוך שטח מוקף בקו');return;}
+  const snapBeforeBorder=ctx.getImageData(0,0,MC.width,MC.height);
   saveHistory();
   const{mw,mh,scale,reachable}=mask;
-  // bounding box
   let x0=mw,y0=mh,x1=0,y1=0;
   for(let y=0;y<mh;y++) for(let x=0;x<mw;x++){
     if(reachable[y*mw+x]){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
   }
-  ctx.fillStyle=color; ctx.strokeStyle=color; ctx.lineWidth=1;
-  let placed=0, tries=0;
+  // collect placed items without drawing yet
   const r=scatterSize;
   const marginMask=Math.ceil(r*scale)+2;
-  const placedList=[]; // {px,py,r} for overlap check
+  const placedList=[];
+  let placed=0, tries=0;
   while(placed<scatterCount && tries<scatterCount*30){
     tries++;
     const mx=x0+marginMask+Math.random()*(x1-x0-marginMask*2);
@@ -3253,19 +3293,25 @@ function doScatterFill(cx,cy){
     const checkR=scatterUseObj&&scatterObj ? r*2.2 : r*2;
     const overlaps=placedList.some(p=>Math.hypot(px-p.px,py-p.py)<checkR+p.r);
     if(overlaps) continue;
-    placedList.push({px,py,r:checkR});
+    const rot=Math.random()*Math.PI*2;
+    placedList.push({px,py,r:checkR,drawR:r,rot});
+    scatterAllPlaced.push({px,py,drawR:r,rot,col:color,filled:scatterFilled,obj:scatterUseObj?scatterObj:null});
+    placed++;
+  }
+  // draw all items on clean canvas
+  ctx.fillStyle=color; ctx.strokeStyle=color; ctx.lineWidth=1;
+  placedList.forEach(({px,py,drawR,rot})=>{
     if(scatterUseObj&&scatterObj){
       ctx.save();
       ctx.translate(px,py);
-      ctx.rotate(Math.random()*Math.PI*2);
-      ctx.drawImage(scatterObj,-r,-r,r*2,r*2);
+      ctx.rotate(rot);
+      ctx.drawImage(scatterObj,-drawR,-drawR,drawR*2,drawR*2);
       ctx.restore();
     } else {
-      ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
+      ctx.beginPath(); ctx.arc(px,py,drawR,0,Math.PI*2);
       if(scatterFilled) ctx.fill(); else ctx.stroke();
     }
-    placed++;
-  }
+  });
   showToast(`✦ ${placed} פוזרו`);
 }
 
