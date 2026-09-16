@@ -348,8 +348,22 @@ body{ position:fixed; overflow:hidden; }
   <span class="step-label" id="naturalLabel" style="display:none">עוצמה</span>
   <input type="range" id="naturalIntensity" min="0" max="100" value="50" oninput="setNaturalIntensity(this.value)" style="display:none">
   <span id="naturalVal" style="display:none">50%</span>
-  <!-- ruler/compass rotation controls -->
-  <div class="sep" id="rotSep" style="display:none"></div>
+  <!-- radiant fill controls -->
+  <!-- scatter fill controls -->
+  <div class="sep" id="scatterSep" style="display:none"></div>
+  <span class="step-label" id="scatterLabel" style="display:none">כמות</span>
+  <button class="step-btn" id="scatterCountMinus" style="display:none" onclick="changeScatter('count',-1)">−</button>
+  <span id="scatterCountVal" style="display:none;font-size:12px;color:var(--text);min-width:30px;text-align:center">1</span>
+  <button class="step-btn" id="scatterCountPlus"  style="display:none" onclick="changeScatter('count',1)">+</button>
+  <div class="sep" id="scatterSep2" style="display:none"></div>
+  <span class="step-label" id="scatterSizeLabel" style="display:none">גודל</span>
+  <button class="step-btn" id="scatterSizeMinus" style="display:none" onclick="changeScatter('size',-1)">−</button>
+  <span id="scatterSizeVal" style="display:none;font-size:12px;color:var(--text);min-width:24px;text-align:center">8</span>
+  <button class="step-btn" id="scatterSizePlus"  style="display:none" onclick="changeScatter('size',1)">+</button>
+  <div class="sep" id="scatterSep3" style="display:none"></div>
+  <button class="step-btn" id="scatterFillBtn" style="display:none;min-width:36px" onclick="toggleScatterFill()">●</button>
+  <button class="step-btn" id="scatterObjBtn"  style="display:none;min-width:36px" onclick="toggleScatterObj()">⬤</button>
+  <input type="file" id="scatterFileInput" accept="image/*" style="display:none" onchange="loadScatterObj(this)">
   <span class="step-label" id="rotLabel" style="display:none">סיבוב</span>
   <button class="step-btn" id="rotMinus" style="display:none" onclick="rotateToolBy(-0.5)">−</button>
   <span id="rotVal" style="display:none">0°</span>
@@ -377,7 +391,7 @@ body{ position:fixed; overflow:hidden; }
 <div id="canvasWrap">
   <div id="canvasInner" style="position:absolute;top:0;left:0;transform-origin:0 0;width:100%;height:100%;">
     <canvas id="mainCanvas"></canvas>
-
+    <canvas id="inkCanvas" style="position:absolute;top:0;left:0;display:none;pointer-events:none;"></canvas>
     <canvas id="selCanvas"></canvas>
     <canvas id="pieceCanvas"></canvas>
   </div>
@@ -523,6 +537,9 @@ body{ position:fixed; overflow:hidden; }
   <button class="tool-btn" id="btnFill"  onclick="setMode('fill')">
     <span class="icon">🪣</span><span class="lbl">מילוי</span>
   </button>
+  <button class="tool-btn" id="btnScatter" onclick="setMode('scatter')">
+    <span class="icon">✦</span><span class="lbl">פיזור</span>
+  </button>
   <button class="tool-btn" id="btnText"  onclick="setMode('text')">
     <span class="icon">🔤</span><span class="lbl">טקסט</span>
   </button>
@@ -586,6 +603,8 @@ body{ position:fixed; overflow:hidden; }
 <script>
 // ── ELEMENTS ──
 const MC   = document.getElementById('mainCanvas');
+const IKC  = document.getElementById('inkCanvas');
+const iCtx = IKC.getContext('2d');
 const ctx  = MC.getContext('2d');
 const SC   = document.getElementById('selCanvas');
 const sCtx = SC.getContext('2d');
@@ -1528,6 +1547,12 @@ function layout(){
   if(MC.width>0&&MC.height>0) try{saved=ctx.getImageData(0,0,MC.width,MC.height);}catch(e){}
   MC.width=SC.width=PC.width=W;
   MC.height=SC.height=PC.height=H;
+  // save inkCanvas before resize (resizing clears it)
+  let inkSnap=null;
+  if(IKC.width>0&&IKC.height>0) try{inkSnap=iCtx.getImageData(0,0,IKC.width,IKC.height);}catch(e){}
+  IKC.width=W; IKC.height=H;
+  iCtx.fillStyle='#fff'; iCtx.fillRect(0,0,W,H);
+  if(inkSnap) try{iCtx.putImageData(inkSnap,0,0);}catch(e){}
   if(saved) try{ctx.putImageData(saved,0,0);}catch(e){}
   else { initWhite(); }
   if(!window._layoutDone) window._layoutDone=true;
@@ -1628,7 +1653,7 @@ function setMode(m){
   if(piece) stampPiece();
   mode=m;
   MC.style.pointerEvents=(m==='ruler'||m==='compass'||m==='zoom')?'none':'auto';
-  MC.style.cursor={draw:'crosshair',eraser:'cell',fill:'crosshair',text:'text',rect:'crosshair',lasso:'crosshair',shape:'crosshair',ruler:'default',compass:'default',natural:'crosshair',zoom:'move',eyedrop:'crosshair'}[m]||'crosshair';
+  MC.style.cursor={draw:'crosshair',eraser:'cell',fill:'crosshair',text:'text',rect:'crosshair',lasso:'crosshair',shape:'crosshair',ruler:'default',compass:'default',natural:'crosshair',zoom:'move',eyedrop:'crosshair',scatter:'crosshair'}[m]||'crosshair';
   // show/hide overlay canvases and compass controls
   RC.style.display=m==='ruler'?'block':'none';
   CC.style.display=m==='compass'?'block':'none';
@@ -1647,7 +1672,7 @@ function setMode(m){
     showToast('🔵 גרור המחוגה • לחץ "הצמד חוד" לקיבוע');
   }
   document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
-  const idMap={draw:'btnDraw',eraser:'btnErase',fill:'btnFill',text:'btnText',rect:'btnRect',lasso:'btnLasso',shape:'btnShape',ruler:'btnRuler',compass:'btnCompass',natural:'btnNatural',eyedrop:'btnEyedrop'};
+  const idMap={draw:'btnDraw',eraser:'btnErase',fill:'btnFill',text:'btnText',rect:'btnRect',lasso:'btnLasso',shape:'btnShape',ruler:'btnRuler',compass:'btnCompass',natural:'btnNatural',eyedrop:'btnEyedrop',scatter:'btnScatter'};
   const el=document.getElementById(idMap[m]);
   if(el) el.classList.add('active');
   // show/hide natural brush intensity controls
@@ -1659,6 +1684,13 @@ function setMode(m){
   if(m!=='eraser') hideEraserCursor();
   if(m!=='shape')['polySep','polyLabel','polyMinus','polySidesVal','polyPlus'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.style.display='none';
+  });
+  // show/hide radiant controls
+  const showScatter=m==='scatter';
+  ['scatterSep','scatterLabel','scatterCountMinus','scatterCountVal','scatterCountPlus',
+   'scatterSep2','scatterSizeLabel','scatterSizeMinus','scatterSizeVal','scatterSizePlus',
+   'scatterSep3','scatterFillBtn','scatterObjBtn'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.style.display=showScatter?'inline-block':'none';
   });
   // show/hide rotation controls for ruler/compass
   const showRot=m==='ruler'||m==='compass';
@@ -1808,19 +1840,26 @@ function mirrorPoints(x, y){
 }
 
 // draw a dot at all mirror positions
-function mirrorDot(x, y, r){
+function mirrorDot(x,y,r){
   const dc=getCtx();
   mirrorPoints(x,y).forEach(p=>{
     dc.beginPath();dc.arc(p.x,p.y,r,0,Math.PI*2);dc.fill();
+    // mirror to inkCanvas in black
+    iCtx.fillStyle='#000';
+    iCtx.beginPath();iCtx.arc(p.x,p.y,r,0,Math.PI*2);iCtx.fill();
   });
 }
 
-// draw a line segment at all mirror positions
 function mirrorLine(x0,y0,x1,y1){
   const dc=getCtx();
   mirrorPoints(x0,y0).forEach((p,i)=>{
     const q=mirrorPoints(x1,y1)[i];
     dc.beginPath();dc.moveTo(p.x,p.y);dc.lineTo(q.x,q.y);dc.stroke();
+    // mirror to inkCanvas in black
+    iCtx.strokeStyle='#000';
+    iCtx.lineWidth=dc.lineWidth;
+    iCtx.lineCap='round';iCtx.lineJoin='round';
+    iCtx.beginPath();iCtx.moveTo(p.x,p.y);iCtx.lineTo(q.x,q.y);iCtx.stroke();
   });
 }
 
@@ -1953,6 +1992,11 @@ function onDown(e){
       setColorFromHex(hex);
       showToast('💉 '+hex);
     }
+    return;
+  }
+  if(mode==='scatter'){
+    const[x,y]=getPos(e);
+    doScatterFill(x,y);
     return;
   }
   if(mode==='fill'){saveHistory();floodFill(e);return;}
@@ -3111,6 +3155,8 @@ function _doClearAll(){
   undoStack=[];redoStack=[];
   ctx.clearRect(0,0,MC.width,MC.height);
   initWhite();
+  iCtx.clearRect(0,0,IKC.width,IKC.height);
+  iCtx.fillStyle='#fff'; iCtx.fillRect(0,0,IKC.width,IKC.height);
   saveHistory();
   document.querySelectorAll('.text-label').forEach(el=>el.remove());
   dbSet('ציור_autosave','').catch(()=>{});
@@ -3127,6 +3173,184 @@ function _doClearAll(){
 }
 
 // ── PUZZLE ──
+// ── SCATTER FILL ──
+let scatterCount=1, scatterSize=8;
+let scatterFilled=true;
+let scatterUseObj=false;
+let scatterObj=null;
+
+function changeScatter(type,d){
+  if(type==='count') scatterCount=Math.max(1,scatterCount+d);
+  if(type==='size')  scatterSize=Math.max(1,scatterSize+d);
+  const cv=document.getElementById('scatterCountVal'); if(cv) cv.textContent=scatterCount;
+  const sv=document.getElementById('scatterSizeVal');  if(sv) sv.textContent=scatterSize;
+}
+
+function toggleScatterFill(){
+  scatterFilled=!scatterFilled;
+  const b=document.getElementById('scatterFillBtn');
+  if(b) b.textContent=scatterFilled?'●':'○';
+}
+
+function toggleScatterObj(){
+  if(!scatterUseObj){
+    document.getElementById('scatterFileInput').click();
+  } else {
+    scatterUseObj=false; scatterObj=null;
+    const b=document.getElementById('scatterObjBtn');
+    if(b) b.textContent='⬤';
+  }
+}
+
+function loadScatterObj(input){
+  const file=input.files[0]; if(!file) return;
+  const img=new Image();
+  img.onload=()=>{
+    scatterObj=img; scatterUseObj=true;
+    const b=document.getElementById('scatterObjBtn');
+    if(b) b.textContent='🖼';
+    showToast('🖼 אובייקט נטען');
+  };
+  img.src=URL.createObjectURL(file);
+  input.value='';
+}
+
+function doScatterFill(cx,cy){
+  iCtx.clearRect(0,0,IKC.width,IKC.height);
+  iCtx.fillStyle='#fff'; iCtx.fillRect(0,0,IKC.width,IKC.height);
+  iCtx.drawImage(MC,0,0);
+  const mask=radiantFloodFill(cx,cy);
+  if(!mask){showToast('⚠️ גע בתוך שטח מוקף בקו');return;}
+  saveHistory();
+  const{mw,mh,scale,reachable}=mask;
+  // bounding box
+  let x0=mw,y0=mh,x1=0,y1=0;
+  for(let y=0;y<mh;y++) for(let x=0;x<mw;x++){
+    if(reachable[y*mw+x]){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
+  }
+  ctx.fillStyle=color; ctx.strokeStyle=color; ctx.lineWidth=1;
+  let placed=0, tries=0;
+  const r=scatterSize;
+  const marginMask=Math.ceil(r*scale)+2;
+  const placedList=[]; // {px,py,r} for overlap check
+  while(placed<scatterCount && tries<scatterCount*30){
+    tries++;
+    const mx=x0+marginMask+Math.random()*(x1-x0-marginMask*2);
+    const my=y0+marginMask+Math.random()*(y1-y0-marginMask*2);
+    if(mx<0||my<0) continue;
+    const corners=[
+      [Math.floor(mx-marginMask),Math.floor(my-marginMask)],
+      [Math.floor(mx+marginMask),Math.floor(my-marginMask)],
+      [Math.floor(mx-marginMask),Math.floor(my+marginMask)],
+      [Math.floor(mx+marginMask),Math.floor(my+marginMask)],
+      [Math.floor(mx),Math.floor(my)]
+    ];
+    const ok=corners.every(([cx2,cy2])=>
+      cx2>=0&&cy2>=0&&cx2<mw&&cy2<mh&&reachable[cy2*mw+cx2]===1
+    );
+    if(!ok) continue;
+    const px=mx/scale, py=my/scale;
+    const checkR=scatterUseObj&&scatterObj ? r*2.2 : r*2;
+    const overlaps=placedList.some(p=>Math.hypot(px-p.px,py-p.py)<checkR+p.r);
+    if(overlaps) continue;
+    placedList.push({px,py,r:checkR});
+    if(scatterUseObj&&scatterObj){
+      ctx.save();
+      ctx.translate(px,py);
+      ctx.rotate(Math.random()*Math.PI*2);
+      ctx.drawImage(scatterObj,-r,-r,r*2,r*2);
+      ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
+      if(scatterFilled) ctx.fill(); else ctx.stroke();
+    }
+    placed++;
+  }
+  showToast(`✦ ${placed} פוזרו`);
+}
+
+function buildInkMask(){
+  const mw=380, scale=mw/IKC.width, mh=Math.round(IKC.height*scale);
+  const small=document.createElement('canvas');
+  small.width=mw; small.height=mh;
+  small.getContext('2d').drawImage(IKC,0,0,mw,mh);
+  const data=small.getContext('2d').getImageData(0,0,mw,mh).data;
+  const bright=new Float32Array(mw*mh);
+  for(let i=0;i<mw*mh;i++)
+    bright[i]=(data[i*4]+data[i*4+1]+data[i*4+2])/3;
+  const edge=new Uint8Array(mw*mh);
+  for(let y=1;y<mh-1;y++){
+    for(let x=1;x<mw-1;x++){
+      const i=y*mw+x, b=bright[i];
+      if(Math.abs(b-bright[i-1])>30||Math.abs(b-bright[i+1])>30||
+         Math.abs(b-bright[i-mw])>30||Math.abs(b-bright[i+mw])>30)
+        edge[i]=1;
+    }
+  }
+  // dilate edge by 1px to close small gaps
+  const isInk=new Uint8Array(mw*mh);
+  const r=1;
+  for(let y=0;y<mh;y++){
+    for(let x=0;x<mw;x++){
+      if(!edge[y*mw+x]) continue;
+      for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+        const nx=x+dx, ny=y+dy;
+        if(nx>=0&&ny>=0&&nx<mw&&ny<mh) isInk[ny*mw+nx]=1;
+      }
+    }
+  }
+  return{mw,mh,scale,isInk};
+}
+
+function radiantFloodFill(cx,cy){
+  const{mw,mh,scale,isInk}=buildInkMask();
+  const startX=Math.floor(cx*scale), startY=Math.floor(cy*scale);
+  if(startX<0||startY<0||startX>=mw||startY>=mh) return null;
+  if(isInk[startY*mw+startX]) return null;
+  const reachable=new Uint8Array(mw*mh);
+  const queue=new Int32Array(mw*mh);
+  let qHead=0,qTail=0;
+  const si=startY*mw+startX; reachable[si]=1; queue[qTail++]=si;
+  let hitEdge=false;
+  while(qHead<qTail){
+    const idx=queue[qHead++]; const x=idx%mw, y=(idx/mw)|0;
+    if(x===0||x===mw-1||y===0||y===mh-1) hitEdge=true;
+    [[idx-1,x>0],[idx+1,x<mw-1],[idx-mw,y>0],[idx+mw,y<mh-1]].forEach(([ni,ok])=>{
+      if(ok&&!isInk[ni]&&!reachable[ni]){reachable[ni]=1;queue[qTail++]=ni;}
+    });
+  }
+  if(hitEdge) return null; // shape not closed
+  return{mw,mh,scale,reachable};
+}
+
+function maskAllows(mask,x,y){
+  if(x<0||y<0||x>MC.width||y>MC.height) return false;
+  const mx=Math.floor(x*mask.scale), my=Math.floor(y*mask.scale);
+  if(mx<0||my<0||mx>=mask.mw||my>=mask.mh) return false;
+  return mask.reachable[my*mask.mw+mx]===1;
+}
+
+function doRadiantFill(cx,cy){
+  const mask=radiantFloodFill(cx,cy);
+  if(!mask){showToast('⚠️ וודא שהצורה סגורה לגמרי ונגע בתוכה');return;}
+  saveHistory();
+  ctx.fillStyle=color;
+  const angleStep=(Math.PI*2)/radiantRayCount;
+  for(let a=0;a<radiantRayCount;a++){
+    const angle=a*angleStep, dx=Math.cos(angle), dy=Math.sin(angle);
+    let step=1;
+    while(step<3000){
+      const dist=step*radiantStepDist;
+      const x=cx+dx*dist, y=cy+dy*dist;
+      if(!maskAllows(mask,x,y)) break;
+      const size=radiantStartSize+step*radiantGrowth;
+      ctx.beginPath(); ctx.arc(x,y,Math.max(size,1)/2,0,Math.PI*2); ctx.fill();
+      step++;
+    }
+  }
+  showToast('✨ מילוי קורן הושלם');
+}
+
 function toggleHelp(){
   const p=document.getElementById('helpPanel');
   if(p.style.display==='none'){
