@@ -527,11 +527,13 @@ body{ position:fixed; overflow:hidden; }
 </div>
 
 <div id="bottomBar">
+  <button class="tool-btn" onclick="toggleHelp()"><span class="icon">❓</span><span class="lbl">עזרה</span></button>
+  <div class="vdiv"></div>
   <button class="tool-btn active" id="btnDraw"  onclick="setMode('draw')">
     <span class="icon">✏️</span><span class="lbl">ציור</span>
   </button>
   <button class="tool-btn" id="btnNatural" onclick="setMode('natural')">
-    <span class="icon">🎨</span><span class="lbl">מברשת</span>
+    <span class="icon">🖌️</span><span class="lbl">מברשת</span>
   </button>
   <button class="tool-btn" id="btnErase" onclick="setMode('eraser')">
     <span class="icon">🧹</span><span class="lbl">מחק</span>
@@ -580,7 +582,47 @@ body{ position:fixed; overflow:hidden; }
   <div class="vdiv"></div>
   <button class="tool-btn" onclick="openPuzzle()"><span class="icon">🧩</span><span class="lbl">פאזל</span></button>
   <div class="vdiv"></div>
-  <button class="tool-btn" onclick="toggleHelp()"><span class="icon">❓</span><span class="lbl">עזרה</span></button>
+  <div class="vdiv"></div>
+  <button class="tool-btn" onclick="toggleColorMix()"><span class="icon">🎨</span><span class="lbl">ערבוב</span></button>
+</div>
+
+<!-- COLOR MIX PANEL -->
+<div id="colorMixPanel" style="display:none;position:fixed;z-index:60;bottom:var(--bar-h);left:0;right:0;
+  background:var(--panel);border-top:2px solid #e94560;border-radius:16px 16px 0 0;
+  padding:14px 16px 18px;font-family:Heebo,sans-serif;direction:rtl;
+  box-shadow:0 -4px 20px rgba(0,0,0,.5);">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <span style="font-size:14px;font-weight:600;color:#fff;">🎨 ערבוב צבעים</span>
+    <button onclick="toggleColorMix()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">✕</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div id="mixSq0" onclick="fillMixSquare(0)" style="width:100%;aspect-ratio:1;border:2px dashed #2a2a4a;border-radius:8px;cursor:pointer;"></div>
+      <button onclick="clearMixSquare(0)" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;">🗑</button>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div id="mixSq1" onclick="fillMixSquare(1)" style="width:100%;aspect-ratio:1;border:2px dashed #2a2a4a;border-radius:8px;cursor:pointer;"></div>
+      <button onclick="clearMixSquare(1)" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;">🗑</button>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div id="mixSq2" onclick="fillMixSquare(2)" style="width:100%;aspect-ratio:1;border:2px dashed #2a2a4a;border-radius:8px;cursor:pointer;"></div>
+      <button onclick="clearMixSquare(2)" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;">🗑</button>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div id="mixSq3" onclick="fillMixSquare(3)" style="width:100%;aspect-ratio:1;border:2px dashed #2a2a4a;border-radius:8px;cursor:pointer;"></div>
+      <button onclick="clearMixSquare(3)" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;">🗑</button>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div id="mixResult" style="width:100%;aspect-ratio:1;border:2px solid #4caf50;border-radius:8px;background:#0f3460;"></div>
+      <button onclick="saveMixColor()" title="שמור בטבלה" style="background:none;border:none;color:#4caf50;font-size:16px;cursor:pointer;">➕</button>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:center;">
+    <button onclick="doColorMix()" style="background:#e94560;border:none;color:#fff;
+      padding:10px 32px;border-radius:12px;font-size:15px;font-family:Heebo,sans-serif;cursor:pointer;">
+      💉 ערבב
+    </button>
+  </div>
 </div>
 
 <div id="helpPanel" style="display:none;position:fixed;z-index:80;top:0;left:0;right:0;bottom:0;
@@ -1558,6 +1600,7 @@ function layout(){
   if(saved) try{ctx.putImageData(saved,0,0);}catch(e){}
   else { initWhite(); }
   if(!window._layoutDone) window._layoutDone=true;
+  if(!window._swatchesLoaded){window._swatchesLoaded=true; loadSavedSwatches();}
   if(RC.style.display!=='none'){RC.width=W;RC.height=H;}
   if(CC.style.display!=='none'){CC.width=W;CC.height=H;}
   if(selRect||lassoPoints) drawSelOverlay();
@@ -3425,6 +3468,128 @@ function doRadiantFill(cx,cy){
   showToast('✨ מילוי קורן הושלם');
 }
 
+// ── COLOR MIX ──
+const mixColors=[null,null,null,null]; // hex or null
+let mixResult=null;
+
+function toggleColorMix(){
+  const p=document.getElementById('colorMixPanel');
+  p.style.display=p.style.display==='none'?'block':'none';
+}
+
+function fillMixSquare(i){
+  mixColors[i]=color;
+  const sq=document.getElementById('mixSq'+i);
+  sq.style.background=color;
+  sq.style.border='2px solid #4caf50';
+}
+
+function clearMixSquare(i){
+  mixColors[i]=null;
+  const sq=document.getElementById('mixSq'+i);
+  sq.style.background='';
+  sq.style.border='2px dashed #2a2a4a';
+}
+
+function hexToRgbArr(hex){
+  const r=parseInt(hex.slice(1,3),16);
+  const g=parseInt(hex.slice(3,5),16);
+  const b=parseInt(hex.slice(5,7),16);
+  return[r,g,b];
+}
+
+function doColorMix(){
+  const filled=mixColors.filter(c=>c!==null);
+  if(filled.length<2){showToast('⚠️ מלא לפחות 2 מרובעים');return;}
+  let r=0,g=0,b=0;
+  filled.forEach(hex=>{
+    const[cr,cg,cb]=hexToRgbArr(hex);
+    r+=cr; g+=cg; b+=cb;
+  });
+  r=Math.round(r/filled.length);
+  g=Math.round(g/filled.length);
+  b=Math.round(b/filled.length);
+  mixResult='#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+  document.getElementById('mixResult').style.background=mixResult;
+  // set as current color
+  setColorFromHex(mixResult);
+  showToast('🎨 צבע מעורבב: '+mixResult);
+}
+
+function saveMixColor(){
+  if(!mixResult){showToast('⚠️ ערבב תחילה');return;}
+  addSwatch(mixResult, true);
+  // load existing saved colors, add new one
+  dbGet('savedSwatches').then(data=>{
+    const arr=data?JSON.parse(data):[];
+    if(!arr.includes(mixResult)){
+      arr.push(mixResult);
+      dbSet('savedSwatches', JSON.stringify(arr)).catch(()=>{});
+    }
+  }).catch(()=>{
+    dbSet('savedSwatches', JSON.stringify([mixResult])).catch(()=>{});
+  });
+  showToast('✅ צבע נשמר בטבלה');
+}
+
+function addSwatch(hex, deletable){
+  const bar=document.getElementById('topBar');
+  if(bar.querySelector(`.swatch[data-color="${hex}"]`)) return;
+  const sw=document.createElement('div');
+  sw.className='swatch'+(deletable?' saved-swatch':'');
+  sw.style.background=hex;
+  sw.dataset.color=hex;
+  sw.onclick=function(){setSwatch(this);};
+  if(deletable){
+    let pressTimer=null;
+    sw.addEventListener('pointerdown',()=>{
+      pressTimer=setTimeout(()=>{
+        pressTimer=null;
+        // custom confirm
+        const overlay=document.createElement('div');
+        overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:center;justify-content:center;';
+        overlay.innerHTML=`<div style="background:#16213e;border:2px solid #e94560;border-radius:16px;padding:20px 24px;text-align:center;font-family:Heebo,sans-serif;color:#fff;direction:rtl;">
+          <div style="width:40px;height:40px;border-radius:8px;background:${hex};margin:0 auto 12px;border:2px solid #fff;"></div>
+          <div style="font-size:14px;margin-bottom:16px;">למחוק צבע זה?</div>
+          <div style="display:flex;gap:10px;justify-content:center;">
+            <button id="delYes" style="background:#e94560;border:none;color:#fff;padding:8px 20px;border-radius:10px;font-size:14px;cursor:pointer;font-family:Heebo,sans-serif;">מחק</button>
+            <button id="delNo" style="background:#0f3460;border:1.5px solid #2a2a4a;color:#fff;padding:8px 20px;border-radius:10px;font-size:14px;cursor:pointer;font-family:Heebo,sans-serif;">בטל</button>
+          </div>
+        </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#delNo').onclick=()=>document.body.removeChild(overlay);
+        overlay.querySelector('#delYes').onclick=()=>{
+          document.body.removeChild(overlay);
+          deleteSavedSwatch(hex,sw);
+        };
+      },600);
+    },{passive:true});
+    sw.addEventListener('pointerup',()=>clearTimeout(pressTimer),{passive:true});
+    sw.addEventListener('pointercancel',()=>clearTimeout(pressTimer),{passive:true});
+  }
+  const swatches=bar.querySelectorAll('.swatch');
+  const last=swatches[swatches.length-1];
+  if(last) last.after(sw); else bar.prepend(sw);
+}
+
+function deleteSavedSwatch(hex, el){
+  el.remove();
+  dbGet('savedSwatches').then(data=>{
+    const arr=data?JSON.parse(data):[];
+    const filtered=arr.filter(c=>c!==hex);
+    dbSet('savedSwatches', JSON.stringify(filtered)).catch(()=>{});
+  }).catch(()=>{});
+  showToast('🗑 צבע הוסר');
+}
+
+function loadSavedSwatches(){
+  dbGet('savedSwatches').then(data=>{
+    if(!data) return;
+    const arr=JSON.parse(data);
+    arr.forEach(hex=>addSwatch(hex, true));
+  }).catch(()=>{});
+}
+
 function toggleHelp(){
   const p=document.getElementById('helpPanel');
   if(p.style.display==='none'){
@@ -3449,40 +3614,44 @@ function buildHelp(){
 
   return sec('🎨 כלי ציור',[
     ['✏️','ציור','ציור חופשי. עובי נשלט ע"י − ו+ בסרגל העליון.'],
-    ['🎨','מברשת טבעית','ציור עם גוונים אקראיים + מריחה. סליידר "עוצמה" בסרגל העליון.'],
-    ['🧹','מחק','מחיקה חופשית. עיגול אפור מציג את השטח. עובי שולט בגודל.'],
+    ['🖌️','מברשת טבעית','ציור עם גוונים אקראיים + מריחה. סליידר "עוצמה" בסרגל העליון.'],
+    ['🧹','מחק','מחיקה חופשית. עובי שולט בגודל.'],
     ['🪣','מילוי','מילוי שטח סגור. אם מראה פעיל — ממלא גם בצד המשוקף.'],
     ['🔤','טקסט','לחץ על הקנבס. גודל נשלט ע"י − ו+ בסרגל העליון.'],
   ])+
   sec('📐 צורות',[
     ['🔷','צורות','קו, מלבן, אליפסה, עיגול, משולש, מעויין, כוכב, חץ, לב, קובייה, גליל, חרוט, פירמידה, מצולע.'],
-    ['🔲','מצולע','בחירת מצולע מציגה "צלעות − [מספר] +" בסרגל העליון (3–20 צלעות).'],
+    ['🔲','מצולע','בסרגל העליון: "צלעות − [מספר] +" (3–20 צלעות).'],
     ['◻️','מילוי צורה','ללא מילוי / מלא / קיווקוו — בתחתית בורר הצורות.'],
   ])+
   sec('✦ פיזור',[
-    ['✦','פיזור','פיזור אקראי של נקודות או אובייקטים בתוך צורה סגורה. גע בתוך הצורה לאחר בחירת הכלי.'],
-    ['','כמות − +','מספר הנקודות/אובייקטים לפיזור בכל לחיצה. מתחיל מ-1.'],
-    ['','גודל − +','גודל הנקודה/אובייקט בפיקסלים.'],
-    ['●','מלא / ○ קו','טוגל בין עיגול מלא לקו בלבד.'],
-    ['⬤','נקודה / 🖼 אובייקט','טוגל בין נקודות לאובייקט — לחץ ⬤ לטעינת תמונה. האובייקט יצויר בגודל שנקבע עם סיבוב אקראי.'],
-    ['📍','סמן','לחץ לפני ציור המסגרת. שומר נקודת ציון לשחזור הרקע ללא מסגרת.'],
-    ['🗑🔲','מחק מסגרת','לאחר פיזור — מוחק את המסגרת ומצייר מחדש את כל הנקודות על הרקע הנקי.'],
-    ['','ללא חפיפה','נקודות ואובייקטים לא יחפפו אחד עם השני או עם ההיקף.'],
+    ['✦','פיזור','פיזור אקראי בתוך צורה סגורה. גע בתוך הצורה.'],
+    ['','כמות / גודל','שליטה בסרגל העליון. כמות מתחילה מ-1.'],
+    ['●','מלא / ○ קו','טוגל עיגול מלא / קו בלבד.'],
+    ['⬤','נקודה / 🖼 אובייקט','לחץ ⬤ לטעינת תמונה כאובייקט לפיזור.'],
+    ['📍','סמן','לחץ לפני ציור המסגרת. לחץ שוב לביטול.'],
+    ['🗑🔲','מחק מסגרת','לאחר פיזור — מוחק המסגרת, מצייר מחדש הנקודות.'],
+    ['','ללא חפיפה','נקודות/אובייקטים מאותו סוג לא יחפפו זה את זה.'],
+  ])+
+  sec('🎨 ערבוב צבעים',[
+    ['🎨','ערבוב','פותח פאנל ערבוב צבעים.'],
+    ['','מרובעים','לחץ על מרובע למלאו בצבע הנוכחי. 🗑 לניקוי.'],
+    ['💉','ערבב','מחשב ממוצע של הצבעים המלאים ומגדיר כצבע נוכחי.'],
+    ['➕','שמור','שומר את הצבע המעורבב לטבלת הצבעים לצמיתות.'],
+    ['','מחיקת צבע','לחיצה ארוכה על צבע שנוסף → שאלת אישור למחיקה.'],
   ])+
   sec('🔲 בחירה ועריכה',[
     ['⬚','מרובע','בחירת שטח. פאנל נפתח בתחתית.'],
     ['🔆','לאסו','בחירת שטח חופשי.'],
     ['✂️','גזור','העביר לחתיכה מרחפת.'],
     ['📋','העתק','העתק לחתיכה מרחפת ומשאיר מקור.'],
-    ['💉','טפטפת','דגום ממוצע משוקלל של צבעי השטח הנבחר.'],
+    ['💉','טפטפת','ממוצע משוקלל של צבעי השטח הנבחר.'],
     ['🗑️','מחק בחירה','מחק את תוכן הבחירה.'],
   ])+
   sec('✏️ פאנל עריכת חתיכה',[
-    ['↔','רוחב','סליידר לשינוי רוחב.'],
-    ['↕','גובה','סליידר לשינוי גובה.'],
+    ['↔↕','רוחב / גובה','סליידר לשינוי מידות.'],
     ['↻','סיבוב','0°–360°. הזווית מוצגת בפינה שמאל-עליון.'],
-    ['⇄','היפוך אופקי','סליידר רציף — 0% מקורי, 100% מראה.'],
-    ['⇵','היפוך אנכי','סליידר רציף.'],
+    ['⇄⇵','היפוך','סליידר רציף — 0% מקורי, 100% מראה מלאה.'],
     ['⚡','מיזוג','רגיל / כפל / בהיר.'],
     ['⬜','שקיפות','10%–100%.'],
     ['🔍','X-Ray','שקיפות 45% למיקום מדויק.'],
@@ -3491,41 +3660,37 @@ function buildHelp(){
     ['✕','בטל','החזר למיקום המקורי ואפה.'],
   ])+
   sec('📏 סרגל',[
-    ['','גרירה','גרור להזזה.'],
-    ['','2 אצבעות','סיבוב (מסך מגע).'],
-    ['','סיבוב − +','0.5° לכל לחיצה בסרגל העליון.'],
-    ['','הזזה − +','0.1מ"מ מאונך לסרגל לכל לחיצה.'],
-    ['','ציור','לחץ על העיפרון לציור קו ישר. החוד ממש על קו המדידה.'],
+    ['','גרירה / 2 אצבעות','הזזה / סיבוב.'],
+    ['','± בסרגל העליון','סיבוב 0.5° לכל לחיצה.'],
+    ['','הזזה ±','0.1מ"מ מאונך לסרגל.'],
+    ['','ציור','לחץ על העיפרון — החוד ממש על קו המדידה.'],
   ])+
   sec('🔵 מחוגה',[
-    ['','גרירה','גרור להזזה.'],
-    ['','2 אצבעות','סיבוב.'],
-    ['','סיבוב − +','0.5° לכל לחיצה בסרגל העליון.'],
-    ['📍','הצמד חוד','קובע מרכז. מעגל מקווקוו מוצג בקביעת רדיוס ונמחק אחרי ציור.'],
+    ['','גרירה / 2 אצבעות','הזזה / סיבוב.'],
+    ['','± בסרגל העליון','סיבוב 0.5° לכל לחיצה.'],
+    ['📍','הצמד חוד','קובע מרכז. מעגל מקווקוו בקביעת רדיוס.'],
     ['✏️','התחל ציור','גרור לציור קשת.'],
   ])+
   sec('🎨 צבעים',[
     ['🌈','בורר מתקדם','HSV + hex.'],
     ['⬤','צבעים מהירים','עיגולי הצבע בסרגל העליון.'],
-    ['💉','טפטפת','בחר שטח → לחץ טפטפת בפאנל הבחירה.'],
+    ['','לחיצה ארוכה','על צבע שנוסף — אפשרות מחיקה.'],
+    ['💉','טפטפת','בחר שטח (מרובע/לאסו) → לחץ טפטפת בפאנל.'],
   ])+
   sec('🔧 כלים כלליים',[
-    ['↔️','מראה X','שיקוף אופקי. המילוי והפיזור גם משתקפים.'],
-    ['↕️','מראה Y','שיקוף אנכי.'],
-    ['↩️','בטל','בטל פעולה.'],
-    ['↪️','שחזר','שחזר פעולה.'],
+    ['↔️↕️','מראה X/Y','שיקוף בזמן אמת. המילוי/פיזור גם משתקפים.'],
+    ['↩️↪️','בטל / שחזר','בטל או שחזר פעולה.'],
     ['🖼️','הדבק','חתיכה מרחפת → קבע. אחרת → קליפבורד.'],
     ['💾','שמור','PNG. ברירת מחדל: "ציור תאריך שעה".'],
-    ['📁','תיקייה','בחר תיקיית שמירה קבועה. פעם אחת — נזכרת.'],
+    ['📁','תיקייה','בחר תיקיית שמירה קבועה.'],
     ['🗑️','נקה','מחיקת כל הציור עם אישור.'],
     ['🧩','פאזל','המר לפאזל.'],
-    ['❓','עזרה','מסך זה.'],
+    ['❓','עזרה','מסך זה — בצד שמאל בסרגל התחתון.'],
   ])+
   sec('👌 מחוות מגע',[
     ['👆','אצבע אחת','ציור / גרירה / בחירה.'],
     ['✌️','שתי אצבעות','Zoom אמיתי לפיקסלים. לא פעיל בסרגל/מחוגה.'],
-    ['📏✌️','סרגל','סיבוב. לחלופין ± בסרגל העליון.'],
-    ['🔵✌️','מחוגה','סיבוב. לחלופין ± בסרגל העליון.'],
+    ['📏🔵✌️','סרגל/מחוגה','סיבוב. לחלופין ± בסרגל העליון.'],
   ]);
 }
 function openPuzzle(){
