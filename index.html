@@ -364,7 +364,7 @@ body{ position:fixed; overflow:hidden; }
   <button class="step-btn" id="scatterFillBtn" style="display:none;min-width:36px" onclick="toggleScatterFill()">●</button>
   <button class="step-btn" id="scatterObjBtn"  style="display:none;min-width:36px" onclick="toggleScatterObj()">⬤</button>
   <button class="step-btn" id="scatterBorderBtn" style="display:none;min-width:50px" onclick="eraseScatterBorder()" title="מחק מסגרת">🗑🔲</button>
-  <button class="step-btn" id="scatterMarkBtn" style="display:none;min-width:36px" title="סמן לפני מחיקת מסגרת" onclick="markScatterCheckpoint()">📍</button>
+  <button class="step-btn" id="scatterMarkBtn" style="display:none;min-width:36px" title="סמן / בטל סימון" onclick="markScatterCheckpoint()">📍</button>
   <input type="file" id="scatterFileInput" accept="image/*" style="display:none" onchange="loadScatterObj(this)">
   <span class="step-label" id="rotLabel" style="display:none">סיבוב</span>
   <button class="step-btn" id="rotMinus" style="display:none" onclick="rotateToolBy(-0.5)">−</button>
@@ -3183,12 +3183,30 @@ let scatterObj=null;
 let scatterRemoveBorder=false;
 let scatterCheckpoint=null; // snapshot before border
 
-function markScatterCheckpoint(){
-  scatterCheckpoint=ctx.getImageData(0,0,MC.width,MC.height);
+function cancelScatterCheckpoint(){
+  scatterCheckpoint=null;
   scatterAllPlaced=[];
   const b=document.getElementById('scatterMarkBtn');
-  if(b){b.textContent='📍✓';b.style.color='#4caf50';}
-  showToast('📍 נקודה סומנה — עכשיו צייר את המסגרת');
+  if(b){b.textContent='📍';b.style.color='';}
+  showToast('↩ סימון בוטל');
+}
+
+function markScatterCheckpoint(){
+  if(scatterCheckpoint){
+    // second press — cancel
+    scatterCheckpoint=null;
+    scatterAllPlaced=[];
+    const b=document.getElementById('scatterMarkBtn');
+    if(b){b.textContent='📍';b.style.color='';}
+    showToast('↩ סימון בוטל');
+  } else {
+    // first press — mark
+    scatterCheckpoint=ctx.getImageData(0,0,MC.width,MC.height);
+    scatterAllPlaced=[];
+    const b=document.getElementById('scatterMarkBtn');
+    if(b){b.textContent='📍✓';b.style.color='#4caf50';}
+    showToast('📍 נקודה סומנה — צייר מסגרת ופזר');
+  }
 }
 
 let scatterAllPlaced=[]; // accumulate all placed items
@@ -3270,10 +3288,13 @@ function doScatterFill(cx,cy){
   }
   // collect placed items without drawing yet
   const r=scatterSize;
-  const marginMask=Math.ceil(r*scale)+2;
-  const placedList=[];
+  const isObjMode=!!(scatterUseObj&&scatterObj);
+  const marginMask=Math.ceil(r*scale*1.5)+2;
+  const placedList=[]; // current session placements
+  // combine with all previous placements for overlap check
+  const allPrev=scatterAllPlaced.map(p=>({px:p.px,py:p.py,drawR:p.drawR,isObj:p.isObj||false}));
   let placed=0, tries=0;
-  while(placed<scatterCount && tries<scatterCount*30){
+  while(placed<scatterCount && tries<Math.max(200,scatterCount*50)){
     tries++;
     const mx=x0+marginMask+Math.random()*(x1-x0-marginMask*2);
     const my=y0+marginMask+Math.random()*(y1-y0-marginMask*2);
@@ -3290,12 +3311,19 @@ function doScatterFill(cx,cy){
     );
     if(!ok) continue;
     const px=mx/scale, py=my/scale;
-    const checkR=scatterUseObj&&scatterObj ? r*2.2 : r*2;
-    const overlaps=placedList.some(p=>Math.hypot(px-p.px,py-p.py)<checkR+p.r);
+    const isObj=isObjMode;
+    const checkR=isObj ? r*3 : r*2;
+    const allCheck=[...allPrev,...placedList];
+    const overlaps=allCheck.some(p=>{
+      const dist=Math.hypot(px-p.px,py-p.py);
+      if(isObj&&p.isObj) return dist<r+p.drawR;      // obj vs obj
+      if(!isObj&&!p.isObj) return dist<r+p.drawR;    // dot vs dot
+      return dist<(r+p.drawR)*0.7;                   // mixed — relaxed
+    });
     if(overlaps) continue;
     const rot=Math.random()*Math.PI*2;
-    placedList.push({px,py,r:checkR,drawR:r,rot});
-    scatterAllPlaced.push({px,py,drawR:r,rot,col:color,filled:scatterFilled,obj:scatterUseObj?scatterObj:null});
+    placedList.push({px,py,r:checkR,drawR:r,rot,isObj});
+    scatterAllPlaced.push({px,py,drawR:r,rot,col:color,filled:scatterFilled,obj:scatterUseObj?scatterObj:null,isObj});
     placed++;
   }
   // draw all items on clean canvas
