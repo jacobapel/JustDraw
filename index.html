@@ -497,6 +497,8 @@ body{ position:fixed; overflow:hidden; }
       <div class="ss"></div>
       <button onclick="eyedropFromSelection()"><span class="icon">💉</span>טפטפת</button>
       <div class="ss"></div>
+      <button onclick="resizeSelAsCut()"><span class="icon">⤢</span>גודל</button>
+      <div class="ss"></div>
       <button class="dng" onclick="deleteSel()"><span class="icon">🗑️</span>מחק</button>
       <div class="ss"></div>
       <button onclick="clearSel()"><span class="icon">✕</span>בטל</button>
@@ -506,6 +508,7 @@ body{ position:fixed; overflow:hidden; }
 
 <!-- piece edit: side icon rail -->
 <div id="pieceRail">
+  <button id="railScale"   onclick="openPieceControl('scale')"   title="גודל">⤢</button>
   <button id="railW"      onclick="openPieceControl('w')"      title="רוחב">↔</button>
   <button id="railH"      onclick="openPieceControl('h')"      title="גובה">↕</button>
   <button id="railR"      onclick="openPieceControl('r')"      title="סיבוב">↻</button>
@@ -1293,7 +1296,7 @@ function togglePieceUI(){
   }
 }
 
-const RAIL_IDS={w:'railW',h:'railH',r:'railR',fliph:'railFlipH',flipv:'railFlipV',blend:'railBlend',opac:'railOpac',xray:'railXray'};
+const RAIL_IDS={scale:'railScale',w:'railW',h:'railH',r:'railR',fliph:'railFlipH',flipv:'railFlipV',blend:'railBlend',opac:'railOpac',xray:'railXray'};
 
 function openPieceControl(key){
   if(!piece) return;
@@ -1333,13 +1336,21 @@ function openPieceControl(key){
     html=`<span class="slider-label">⬜</span>
       <input type="range" id="pieceOpacity" min="10" max="100" value="${op}" oninput="setPieceOpacity(+this.value)">
       <span class="slider-label" id="pieceOpacityVal">${op}%</span>`;
+  } else if(key==='scale'){
+    const origW=piece.w, origH=piece.h;
+    piece._scaleOrigW=piece._scaleOrigW||origW;
+    piece._scaleOrigH=piece._scaleOrigH||origH;
+    html=`<span class="slider-label">⤢</span>
+      <input type="range" id="pieceScale" min="10" max="300" value="100" oninput="scalePiece(+this.value)">
+      <span class="slider-label" id="pieceScaleVal">100%</span>`;
   } else if(key==='xray'){
     html=`<button id="btnXray" class="blend-btn${piece.xray?' active':''}" onclick="toggleXray()" style="flex:1">
         <span class="icon">🔍</span>X-Ray מיקום
       </button>`;
   }
   pieceControlRow.innerHTML=html;
-  if(!pieceUIHidden) pieceControlRow.classList.add('open');
+  const pcr=document.getElementById('pieceControlRow');
+  if(pcr&&!pieceUIHidden) pcr.classList.add('open');
 }
 
 
@@ -2023,6 +2034,8 @@ function clearEraserTrail(){
 function onDown(e){
   e.preventDefault();
   if(mode==='zoom') return;
+  selPinchPtrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(selRect&&selPinchPtrs.size>=2){drawing=false;return;}
   closeSpectrum();
   if(piece && activePieceControl) closePieceControlRow();
   if(mode==='text'){handleTextClick(e);return;}
@@ -2061,6 +2074,11 @@ function onDown(e){
 function onMove(e){
   e.preventDefault();
   if(mode==='zoom') return;
+  if(selRect&&selPinchPtrs.size>=2){
+    selPinchPtrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    handleSelPinch(e);
+    return;
+  }
   if(mode==='rect'||mode==='lasso'){updateSel(e);return;}
   const dc=getCtx(); // drawing context
   if(mode==='shape'&&shapeStart){
@@ -2092,6 +2110,8 @@ function onMove(e){
 
 function onUp(e){
   e.preventDefault();
+  selPinchPtrs.delete(e.pointerId);
+  if(selPinchPtrs.size<2){selPinchDist=null;selPinchRect=null;}
   if(mode==='eraser') clearEraserTrail();
   if(mode==='zoom') return;
   if(mode==='rect'||mode==='lasso'){finishSel(e);return;}
@@ -2577,8 +2597,9 @@ function cutPiece(){
   // 3. Build piece object
   piece={
     imageData:imgData,
-    origImageData:imgData, // keep original for clean scaling
+    origImageData:imgData,
     origX:bx,origY:by,w:bw,h:bh,
+    _scaleOrigW:bw,_scaleOrigH:bh,
     floatX:bx,floatY:by,
     angle:0,flipHProg:0,flipVProg:0,
     blendMode:'source-over', opacity:1, xray:false,
@@ -3218,7 +3239,75 @@ function _doClearAll(){
 }
 
 // ── PUZZLE ──
-// ── SCATTER FILL ──
+// ── PINCH TO RESIZE SELECTION ──
+let selPinchDist=null, selPinchRect=null;
+let selPinchPtrs=new Map();
+
+let selOrigRect=null; // original rect when slider opened
+
+function resizeSelAsCut(){
+  if(!selRect) return;
+  cutPiece();
+  setTimeout(()=>{
+    if(!piece) return;
+    pieceUIHidden=false;
+    const rail=document.getElementById('pieceRail');
+    if(rail) rail.style.display='flex';
+    openPieceControl('scale');
+  },200);
+}
+
+function scalePiece(pct){
+  if(!piece||!piece._scaleOrigW) return;
+  const ratio=pct/100;
+  const newW=Math.max(10,Math.round(piece._scaleOrigW*ratio));
+  const newH=Math.max(10,Math.round(piece._scaleOrigH*ratio));
+  // scale from origImageData
+  const tmp=document.createElement('canvas');
+  tmp.width=piece.origImageData.width; tmp.height=piece.origImageData.height;
+  tmp.getContext('2d').putImageData(piece.origImageData,0,0);
+  const scaled=document.createElement('canvas');
+  scaled.width=newW; scaled.height=newH;
+  const sc=scaled.getContext('2d');
+  sc.imageSmoothingEnabled=true; sc.imageSmoothingQuality='high';
+  sc.drawImage(tmp,0,0,newW,newH);
+  piece.imageData=sc.getImageData(0,0,newW,newH);
+  // keep center fixed
+  const cx=piece.floatX+piece.w/2;
+  const cy=piece.floatY+piece.h/2;
+  piece.w=newW; piece.h=newH;
+  piece.floatX=cx-newW/2;
+  piece.floatY=cy-newH/2;
+  document.getElementById('pieceScaleVal').textContent=pct+'%';
+  redrawPiece();
+}
+
+function toggleSelResize(){
+  const row=document.getElementById('selResizeRow');
+  const open=row.style.display==='none';
+  row.style.display=open?'flex':'none';
+  if(open&&selRect){
+    selOrigRect={...selRect};
+    const sl=document.getElementById('selScaleSlider');
+    if(sl) sl.value=100;
+    document.getElementById('selScaleVal').textContent='100%';
+  }
+}
+
+function scaleSelRect(pct){
+  if(!selRect||!selOrigRect) return;
+  const ratio=pct/100;
+  const cx=selOrigRect.x+selOrigRect.w/2;
+  const cy=selOrigRect.y+selOrigRect.h/2;
+  const nw=Math.max(10,selOrigRect.w*ratio);
+  const nh=Math.max(10,selOrigRect.h*ratio);
+  selRect={x:cx-nw/2,y:cy-nh/2,w:nw,h:nh};
+  document.getElementById('selScaleVal').textContent=pct+'%';
+  drawSelOverlay();
+  updateHandles();
+}
+
+function handleSelPinch(e){ /* handled via buttons now */ }
 let scatterCount=1, scatterSize=8;
 let scatterFilled=true;
 let scatterUseObj=false;
