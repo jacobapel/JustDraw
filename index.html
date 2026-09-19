@@ -587,6 +587,19 @@ body{ position:fixed; overflow:hidden; }
   <div class="vdiv"></div>
   <div class="vdiv"></div>
   <button class="tool-btn" onclick="toggleColorMix()"><span class="icon">🎨</span><span class="lbl">ערבוב</span></button>
+  <div class="vdiv"></div>
+  <button class="tool-btn" onclick="openSortPanel()"><span class="icon">↕️</span><span class="lbl">סדר</span></button>
+</div>
+
+<!-- SORT PANEL -->
+<div id="sortPanel" style="display:none;position:fixed;inset:0;z-index:90;background:rgba(0,0,0,0.85);overflow-y:auto;direction:rtl;font-family:Heebo,sans-serif;touch-action:auto;" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()">
+  <div style="background:var(--panel);max-width:440px;margin:20px auto;border-radius:16px;padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <span style="font-size:16px;font-weight:600;color:#fff;">↕️ סדר כפתורים</span>
+      <button onclick="closeSortPanel()" style="background:#e94560;border:none;color:#fff;border-radius:10px;padding:6px 16px;font-size:14px;cursor:pointer;">✅ שמור וסגור</button>
+    </div>
+    <div id="sortList" style="display:flex;flex-direction:column;gap:6px;"></div>
+  </div>
 </div>
 
 <!-- COLOR MIX PANEL -->
@@ -3308,6 +3321,67 @@ function scaleSelRect(pct){
 }
 
 function handleSelPinch(e){ /* handled via buttons now */ }
+// ── BOTTOM BAR REORDER ──
+let bbDragEl=null, bbDragTimer=null, bbDragClone=null, bbDragOver=null;
+
+function bbInitDrag(){
+  const bar=document.getElementById('bottomBar');
+  bar.addEventListener('pointerdown',e=>{
+    const btn=e.target.closest('.tool-btn,.vdiv');
+    if(!btn) return;
+    bbDragTimer=setTimeout(()=>{
+      bbDragTimer=null;
+      bbDragEl=btn;
+      btn.style.opacity='0.4';
+      bbDragClone=btn.cloneNode(true);
+      bbDragClone.style.cssText=`position:fixed;z-index:999;pointer-events:none;opacity:0.85;
+        background:var(--accent);border-radius:10px;padding:4px 6px;
+        transform:scale(1.15);transition:none;color:#fff;font-size:11px;text-align:center;`;
+      bbDragClone.style.left=(e.clientX-30)+'px';
+      bbDragClone.style.top=(e.clientY-50)+'px';
+      document.body.appendChild(bbDragClone);
+      navigator.vibrate&&navigator.vibrate(30);
+    },600);
+  },{passive:true});
+
+  bar.addEventListener('pointermove',e=>{
+    if(bbDragTimer){clearTimeout(bbDragTimer);bbDragTimer=null;return;}
+    if(!bbDragEl||!bbDragClone) return;
+    bbDragClone.style.left=(e.clientX-30)+'px';
+    bbDragClone.style.top=(e.clientY-50)+'px';
+    bbDragClone.style.display='none';
+    const under=document.elementFromPoint(e.clientX,e.clientY);
+    bbDragClone.style.display='';
+    const overBtn=under&&under.closest('#bottomBar .tool-btn, #bottomBar .vdiv');
+    if(bbDragOver&&bbDragOver!==overBtn) bbDragOver.style.outline='';
+    bbDragOver=overBtn&&overBtn!==bbDragEl?overBtn:null;
+    if(bbDragOver) bbDragOver.style.outline='2px solid #4caf50';
+  },{passive:true});
+
+  bar.addEventListener('pointerup',e=>{
+    if(bbDragTimer){clearTimeout(bbDragTimer);bbDragTimer=null;}
+    if(!bbDragEl){return;}
+    if(bbDragClone){document.body.removeChild(bbDragClone);bbDragClone=null;}
+    bbDragEl.style.opacity='';
+    if(bbDragOver){
+      bbDragOver.style.outline='';
+      const bar2=document.getElementById('bottomBar');
+      const overRect=bbDragOver.getBoundingClientRect();
+      if(e.clientX<overRect.left+overRect.width/2) bar2.insertBefore(bbDragEl,bbDragOver);
+      else bbDragOver.after(bbDragEl);
+    }
+    bbDragEl=null; bbDragOver=null;
+  },{passive:true});
+
+  bar.addEventListener('pointercancel',()=>{
+    if(bbDragTimer){clearTimeout(bbDragTimer);bbDragTimer=null;}
+    if(bbDragClone){document.body.removeChild(bbDragClone);bbDragClone=null;}
+    if(bbDragEl){bbDragEl.style.opacity='';bbDragEl=null;}
+    if(bbDragOver){bbDragOver.style.outline='';bbDragOver=null;}
+  },{passive:true});
+}
+window.addEventListener('load',bbInitDrag);
+
 let scatterCount=1, scatterSize=8;
 let scatterFilled=true;
 let scatterUseObj=false;
@@ -3678,6 +3752,88 @@ function loadSavedSwatches(){
     arr.forEach(hex=>addSwatch(hex, true));
   }).catch(()=>{});
 }
+
+// ── BOTTOM BAR SORT ──
+function openSortPanel(){
+  MC.style.pointerEvents='none';
+  SC.style.pointerEvents='none';
+  const bar=document.getElementById('bottomBar');
+  const list=document.getElementById('sortList');
+  list.innerHTML='';
+  let btnIdx=0;
+  [...bar.children].forEach((el)=>{
+    const icon=el.querySelector('.icon');
+    const lbl=el.querySelector('.lbl');
+    if(!icon&&!lbl) return;
+    const text=(icon?icon.textContent:'')+' '+(lbl?lbl.textContent:'');
+    const idx=btnIdx++;
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;background:#0f3460;border-radius:10px;padding:10px 12px;';
+    row.innerHTML=`<span style="flex:1;color:#fff;font-size:14px;">${text.trim()}</span>`;
+    const btnUp=document.createElement('button');
+    btnUp.textContent='↑';
+    btnUp.style.cssText='background:#16213e;border:1px solid #2a2a4a;color:#fff;border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer;';
+    btnUp.addEventListener('click',e=>{
+      e.stopPropagation();
+      if(el.previousElementSibling) el.previousElementSibling.before(el);
+      openSortPanel();
+    });
+    const btnDn=document.createElement('button');
+    btnDn.textContent='↓';
+    btnDn.style.cssText=btnUp.style.cssText;
+    btnDn.addEventListener('click',e=>{
+      e.stopPropagation();
+      if(el.nextElementSibling) el.nextElementSibling.after(el);
+      openSortPanel();
+    });
+    row.appendChild(btnUp);
+    row.appendChild(btnDn);
+    list.appendChild(row);
+  });
+  document.getElementById('sortPanel').style.display='block';
+}
+
+function closeSortPanel(){
+  document.getElementById('sortPanel').style.display='none';
+  MC.style.pointerEvents='auto';
+  SC.style.pointerEvents='none'; // SC stays none normally
+  // save order
+  const bar=document.getElementById('bottomBar');
+  const order=[...bar.children].map(el=>{
+    const icon=el.querySelector('.icon');
+    const lbl=el.querySelector('.lbl');
+    return {isDiv:!icon&&!lbl, html:el.outerHTML};
+  });
+  dbSet('bbSortOrder',JSON.stringify(order)).catch(()=>{});
+  showToast('✅ סדר נשמר');
+}
+
+function loadSortOrder(){
+  dbGet('bbSortOrder').then(data=>{
+    if(!data) return;
+    const order=JSON.parse(data);
+    const bar=document.getElementById('bottomBar');
+    // clear and rebuild
+    const oldChildren=[...bar.children];
+    // create new elements from saved HTML
+    order.forEach(item=>{
+      const tmp=document.createElement('div');
+      tmp.innerHTML=item.html;
+      const newEl=tmp.firstElementChild;
+      if(!newEl) return;
+      // find matching element in bar by icon+label text
+      const newIcon=newEl.querySelector('.icon');
+      const newLbl=newEl.querySelector('.lbl');
+      const key=(newIcon?newIcon.textContent:'')+'|'+(newLbl?newLbl.textContent:'');
+      const match=oldChildren.find(el=>{
+        const i=el.querySelector('.icon'); const l=el.querySelector('.lbl');
+        return ((i?i.textContent:'')+'|'+(l?l.textContent:''))===key;
+      });
+      if(match) bar.appendChild(match);
+    });
+  }).catch(()=>{});
+}
+window.addEventListener('load',()=>setTimeout(loadSortOrder,300));
 
 function toggleHelp(){
   const p=document.getElementById('helpPanel');
