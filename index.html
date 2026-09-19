@@ -588,15 +588,18 @@ body{ position:fixed; overflow:hidden; }
   <div class="vdiv"></div>
   <button class="tool-btn" onclick="toggleColorMix()"><span class="icon">🎨</span><span class="lbl">ערבוב</span></button>
   <div class="vdiv"></div>
-  <button class="tool-btn" onclick="openSortPanel()"><span class="icon">↕️</span><span class="lbl">סדר</span></button>
+  <button class="tool-btn" id="bbEditBtn"><span class="icon">↕️</span><span class="lbl">סדר</span></button>
 </div>
 
 <!-- SORT PANEL -->
-<div id="sortPanel" style="display:none;position:fixed;inset:0;z-index:90;background:rgba(0,0,0,0.85);overflow-y:auto;direction:rtl;font-family:Heebo,sans-serif;touch-action:auto;" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()">
+<div id="sortPanel" style="display:none;position:fixed;inset:0;z-index:90;background:rgba(0,0,0,0.85);overflow-y:auto;direction:rtl;font-family:Heebo,sans-serif;">
   <div style="background:var(--panel);max-width:440px;margin:20px auto;border-radius:16px;padding:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <span style="font-size:16px;font-weight:600;color:#fff;">↕️ סדר כפתורים</span>
-      <button onclick="closeSortPanel()" style="background:#e94560;border:none;color:#fff;border-radius:10px;padding:6px 16px;font-size:14px;cursor:pointer;">✅ שמור וסגור</button>
+      <div style="display:flex;gap:8px;">
+        <button onclick="resetSortOrder()" style="background:#0f3460;border:1px solid #2a2a4a;color:#aaa;border-radius:10px;padding:6px 12px;font-size:13px;cursor:pointer;">↺ איפוס</button>
+        <button onclick="closeSortPanel()" style="background:#e94560;border:none;color:#fff;border-radius:10px;padding:6px 16px;font-size:14px;cursor:pointer;">✅ שמור וסגור</button>
+      </div>
     </div>
     <div id="sortList" style="display:flex;flex-direction:column;gap:6px;"></div>
   </div>
@@ -3380,7 +3383,59 @@ function bbInitDrag(){
     if(bbDragOver){bbDragOver.style.outline='';bbDragOver=null;}
   },{passive:true});
 }
-window.addEventListener('load',bbInitDrag);
+
+let bbEditMode=false, bbSelected=null;
+
+function toggleBbEdit(){
+  bbEditMode=!bbEditMode;
+  const editBtn=document.getElementById('bbEditBtn');
+  if(bbEditMode){
+    editBtn.querySelector('.icon').textContent='✅';
+    editBtn.querySelector('.lbl').textContent='סיום';
+    showToast('בחר כפתור להזזה, אחר כך בחר יעד');
+  } else {
+    editBtn.querySelector('.icon').textContent='↕️';
+    editBtn.querySelector('.lbl').textContent='סדר';
+    if(bbSelected){bbSelected.style.outline='';bbSelected.style.background='';bbSelected=null;}
+    const bar2=document.getElementById('bottomBar');
+    const order=[...bar2.children].map(el=>({html:el.outerHTML}));
+    dbSet('bbSortOrder',JSON.stringify(order)).then(()=>showToast('✅ סדר נשמר')).catch(()=>{});
+  }
+}
+
+window.addEventListener('load',()=>{
+  const bar=document.getElementById('bottomBar');
+  // edit button
+  document.getElementById('bbEditBtn').addEventListener('click',e=>{
+    e.stopImmediatePropagation();
+    toggleBbEdit();
+  },true);
+  // select-then-place
+  bar.addEventListener('click',e=>{
+    if(!bbEditMode) return;
+    const btn=e.target.closest('.tool-btn');
+    if(!btn||btn.id==='bbEditBtn') return;
+    e.stopPropagation();
+    if(!bbSelected){
+      bbSelected=btn;
+      btn.style.outline='3px solid #e94560';
+      btn.style.background='#1a1a3e';
+      showToast('📍 נבחר — לחץ על יעד');
+    } else if(btn===bbSelected){
+      bbSelected.style.outline=''; bbSelected.style.background=''; bbSelected=null;
+      showToast('❌ בחירה בוטלה');
+    } else {
+      const sr=bbSelected.getBoundingClientRect();
+      const tr=btn.getBoundingClientRect();
+      bbSelected.style.outline=''; bbSelected.style.background='';
+      if(sr.left>tr.left) bar.insertBefore(bbSelected,btn);
+      else btn.after(bbSelected);
+      bbSelected=null;
+      showToast('✅ הועבר');
+    }
+  },true);
+  setTimeout(loadSortOrder,300);
+});
 
 let scatterCount=1, scatterSize=8;
 let scatterFilled=true;
@@ -3755,8 +3810,6 @@ function loadSavedSwatches(){
 
 // ── BOTTOM BAR SORT ──
 function openSortPanel(){
-  MC.style.pointerEvents='none';
-  SC.style.pointerEvents='none';
   const bar=document.getElementById('bottomBar');
   const list=document.getElementById('sortList');
   list.innerHTML='';
@@ -3773,16 +3826,14 @@ function openSortPanel(){
     const btnUp=document.createElement('button');
     btnUp.textContent='↑';
     btnUp.style.cssText='background:#16213e;border:1px solid #2a2a4a;color:#fff;border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer;';
-    btnUp.addEventListener('click',e=>{
-      e.stopPropagation();
+    btnUp.addEventListener('click',()=>{
       if(el.previousElementSibling) el.previousElementSibling.before(el);
       openSortPanel();
     });
     const btnDn=document.createElement('button');
     btnDn.textContent='↓';
     btnDn.style.cssText=btnUp.style.cssText;
-    btnDn.addEventListener('click',e=>{
-      e.stopPropagation();
+    btnDn.addEventListener('click',()=>{
       if(el.nextElementSibling) el.nextElementSibling.after(el);
       openSortPanel();
     });
@@ -3795,8 +3846,6 @@ function openSortPanel(){
 
 function closeSortPanel(){
   document.getElementById('sortPanel').style.display='none';
-  MC.style.pointerEvents='auto';
-  SC.style.pointerEvents='none'; // SC stays none normally
   // save order
   const bar=document.getElementById('bottomBar');
   const order=[...bar.children].map(el=>{
@@ -3806,6 +3855,13 @@ function closeSortPanel(){
   });
   dbSet('bbSortOrder',JSON.stringify(order)).catch(()=>{});
   showToast('✅ סדר נשמר');
+}
+
+function resetSortOrder(){
+  dbSet('bbSortOrder','').catch(()=>{});
+  closeSortPanel();
+  showToast('↺ סדר אופס — טען מחדש');
+  setTimeout(()=>location.reload(),1200);
 }
 
 function loadSortOrder(){
