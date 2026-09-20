@@ -3809,16 +3809,13 @@ function doColorMix(){
 function saveMixColor(){
   if(!mixResult){showToast('⚠️ ערבב תחילה');return;}
   addSwatch(mixResult, true);
-  // load existing saved colors, add new one
-  Promise.resolve(localStorage.getItem('savedSwatches')).then(data=>{
-    const arr=data?JSON.parse(data):[];
+  try{
+    const arr=JSON.parse(localStorage.getItem('savedSwatches')||'[]');
     if(!arr.includes(mixResult)){
       arr.push(mixResult);
-      try{localStorage.setItem('savedSwatches',JSON.stringify(arr));}catch(e){};
+      localStorage.setItem('savedSwatches',JSON.stringify(arr));
     }
-  }).catch(()=>{
-    try{localStorage.setItem('savedSwatches',JSON.stringify([mixResult]));}catch(e){};
-  });
+  }catch(e){}
   showToast('✅ צבע נשמר בטבלה');
 }
 
@@ -3864,20 +3861,19 @@ function addSwatch(hex, deletable){
 
 function deleteSavedSwatch(hex, el){
   el.remove();
-  Promise.resolve(localStorage.getItem('savedSwatches')).then(data=>{
-    const arr=data?JSON.parse(data):[];
-    const filtered=arr.filter(c=>c!==hex);
-    try{localStorage.setItem('savedSwatches',JSON.stringify(filtered));}catch(e){};
-  }).catch(()=>{});
+  try{
+    const arr=JSON.parse(localStorage.getItem('savedSwatches')||'[]');
+    localStorage.setItem('savedSwatches',JSON.stringify(arr.filter(c=>c!==hex)));
+  }catch(e){}
   showToast('🗑 צבע הוסר');
 }
 
 function loadSavedSwatches(){
-  Promise.resolve(localStorage.getItem('savedSwatches')).then(data=>{
+  try{
+    const data=localStorage.getItem('savedSwatches');
     if(!data) return;
-    const arr=JSON.parse(data);
-    arr.forEach(hex=>addSwatch(hex, true));
-  }).catch(()=>{});
+    JSON.parse(data).forEach(hex=>addSwatch(hex, true));
+  }catch(e){}
 }
 
 // ── BOTTOM BAR SORT ──
