@@ -3397,10 +3397,68 @@ function toggleBbEdit(){
     editBtn.querySelector('.icon').textContent='↕️';
     editBtn.querySelector('.lbl').textContent='סדר';
     if(bbSelected){bbSelected.style.outline='';bbSelected.style.background='';bbSelected=null;}
-    const bar2=document.getElementById('bottomBar');
-    const order=[...bar2.children].map(el=>({html:el.outerHTML}));
-    dbSet('bbSortOrder',JSON.stringify(order)).then(()=>showToast('✅ סדר נשמר')).catch(()=>{});
+    saveBbOrder();
   }
+}
+
+function saveBbOrder(){
+  const bar=document.getElementById('bottomBar');
+  const order=[...bar.children].map(el=>{
+    const lbl=el.querySelector('.lbl');
+    return lbl?lbl.textContent.trim():'__div__';
+  });
+  try{localStorage.setItem('bbSortOrder',JSON.stringify(order));}catch(e){}
+  showToast('✅ סדר נשמר');
+}
+
+function loadSortOrder(){
+  try{
+    const data=localStorage.getItem('bbSortOrder');
+    if(!data) return;
+    const order=JSON.parse(data);
+    const bar=document.getElementById('bottomBar');
+    const children=[...bar.children];
+    order.forEach(lbl=>{
+      const el=lbl==='__div__'
+        ? children.find(c=>!c.querySelector('.lbl')&&!c._used)
+        : children.find(c=>{const l=c.querySelector('.lbl');return l&&l.textContent.trim()===lbl&&!c._used;});
+      if(el){el._used=true; bar.appendChild(el);}
+    });
+    children.forEach(c=>delete c._used);
+  }catch(e){}
+}
+
+function saveBbOrderToFile(){
+  const bar=document.getElementById('bottomBar');
+  const order=[...bar.children].map(el=>{
+    const lbl=el.querySelector('.lbl');
+    return lbl?lbl.textContent.trim():'__div__';
+  });
+  // get current HTML and embed order
+  let html=document.documentElement.outerHTML;
+  const marker='window._bbDefaultOrder=';
+  const newLine=`window._bbDefaultOrder=${JSON.stringify(order)};`;
+  if(html.includes(marker)){
+    html=html.replace(/window\._bbDefaultOrder=[^;]+;/,newLine);
+  } else {
+    html=html.replace('<script>','<script>\n'+newLine);
+  }
+  const blob=new Blob([html],{type:'text/html'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  const d=new Date();
+  a.download=`draw_canvas_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}-${String(d.getMinutes()).padStart(2,'0')}.html`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  showToast('💾 הקובץ נשמר עם הסדר החדש');
+  closeSortPanel();
+}
+
+function resetSortOrder(){
+  try{localStorage.removeItem('bbSortOrder');}catch(e){}
+  closeSortPanel();
+  showToast('↺ סדר אופס');
+  setTimeout(()=>location.reload(),800);
 }
 
 window.addEventListener('load',()=>{
@@ -3860,50 +3918,11 @@ function openSortPanel(){
 
 function closeSortPanel(){
   document.getElementById('sortPanel').style.display='none';
-  // save order
-  const bar=document.getElementById('bottomBar');
-  const order=[...bar.children].map(el=>{
-    const icon=el.querySelector('.icon');
-    const lbl=el.querySelector('.lbl');
-    return {isDiv:!icon&&!lbl, html:el.outerHTML};
-  });
-  dbSet('bbSortOrder',JSON.stringify(order)).catch(()=>{});
-  showToast('✅ סדר נשמר');
+  MC.style.pointerEvents='auto';
+  saveBbOrder();
 }
 
-function resetSortOrder(){
-  dbSet('bbSortOrder','').catch(()=>{});
-  closeSortPanel();
-  showToast('↺ סדר אופס — טען מחדש');
-  setTimeout(()=>location.reload(),1200);
-}
 
-function loadSortOrder(){
-  dbGet('bbSortOrder').then(data=>{
-    if(!data) return;
-    const order=JSON.parse(data);
-    const bar=document.getElementById('bottomBar');
-    // clear and rebuild
-    const oldChildren=[...bar.children];
-    // create new elements from saved HTML
-    order.forEach(item=>{
-      const tmp=document.createElement('div');
-      tmp.innerHTML=item.html;
-      const newEl=tmp.firstElementChild;
-      if(!newEl) return;
-      // find matching element in bar by icon+label text
-      const newIcon=newEl.querySelector('.icon');
-      const newLbl=newEl.querySelector('.lbl');
-      const key=(newIcon?newIcon.textContent:'')+'|'+(newLbl?newLbl.textContent:'');
-      const match=oldChildren.find(el=>{
-        const i=el.querySelector('.icon'); const l=el.querySelector('.lbl');
-        return ((i?i.textContent:'')+'|'+(l?l.textContent:''))===key;
-      });
-      if(match) bar.appendChild(match);
-    });
-  }).catch(()=>{});
-}
-window.addEventListener('load',()=>setTimeout(loadSortOrder,300));
 
 function toggleHelp(){
   const p=document.getElementById('helpPanel');
