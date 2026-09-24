@@ -1819,11 +1819,15 @@ function eyedropFromSelection(){
   setMode('draw');
 }
 function setThickness(v){
-  thickness=Math.max(1,Math.min(40,+v));
-  document.getElementById('thickVal').textContent=thickness;
+  thickness=Math.max(0.25,Math.min(40,+v));
+  document.getElementById('thickVal').textContent=thickness%1===0?thickness:thickness.toFixed(1);
+  ctx.lineWidth=thickness;
   if(mode==='eraser') updateEraserCursorSize();
 }
-function changeThickness(d){ setThickness(thickness+d); }
+function changeThickness(d){
+  const step=thickness<1||(d<0&&thickness<=1)?0.25:1;
+  setThickness(Math.round((thickness+d*step)*100)/100);
+}
 setThickness(2);
 function changeFontSize(d){fontSize=Math.max(8,Math.min(120,fontSize+d));document.getElementById('fontSizeVal').textContent=fontSize+'px';}
 
