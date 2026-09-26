@@ -598,6 +598,8 @@ body{ position:fixed; overflow:hidden; }
       <span style="font-size:16px;font-weight:600;color:#fff;">↕️ סדר כפתורים</span>
       <div style="display:flex;gap:8px;">
         <button onclick="resetSortOrder()" style="background:#0f3460;border:1px solid #2a2a4a;color:#aaa;border-radius:10px;padding:6px 12px;font-size:13px;cursor:pointer;">↺ איפוס</button>
+        <button onclick="exportSettings()" style="background:#0f3460;border:1px solid #2a2a4a;color:#4caf50;border-radius:10px;padding:6px 12px;font-size:13px;cursor:pointer;">📤 יצוא</button>
+        <button onclick="importSettings()" style="background:#0f3460;border:1px solid #2a2a4a;color:#2196f3;border-radius:10px;padding:6px 12px;font-size:13px;cursor:pointer;">📥 יבוא</button>
         <button onclick="closeSortPanel()" style="background:#e94560;border:none;color:#fff;border-radius:10px;padding:6px 16px;font-size:14px;cursor:pointer;">✅ שמור וסגור</button>
       </div>
     </div>
@@ -3468,10 +3470,17 @@ function resetSortOrder(){
 window.addEventListener('load',()=>{
   const bar=document.getElementById('bottomBar');
   // edit button
-  document.getElementById('bbEditBtn').addEventListener('click',e=>{
-    e.stopImmediatePropagation();
-    toggleBbEdit();
-  },true);
+  // edit button - short press = select mode, long press = sort panel
+  let bbEditTimer=null;
+  document.getElementById('bbEditBtn').addEventListener('pointerdown',e=>{
+    bbEditTimer=setTimeout(()=>{bbEditTimer=null;openSortPanel();},600);
+  },{passive:true});
+  document.getElementById('bbEditBtn').addEventListener('pointerup',e=>{
+    if(bbEditTimer){clearTimeout(bbEditTimer);bbEditTimer=null;toggleBbEdit();}
+  },{passive:true});
+  document.getElementById('bbEditBtn').addEventListener('pointercancel',()=>{
+    if(bbEditTimer){clearTimeout(bbEditTimer);bbEditTimer=null;}
+  },{passive:true});
   // select-then-place
   bar.addEventListener('click',e=>{
     if(!bbEditMode) return;
@@ -3914,6 +3923,40 @@ function openSortPanel(){
     list.appendChild(row);
   });
   document.getElementById('sortPanel').style.display='block';
+}
+
+function exportSettings(){
+  const settings={
+    bbSortOrder: localStorage.getItem('bbSortOrder'),
+    savedSwatches: localStorage.getItem('savedSwatches')
+  };
+  const blob=new Blob([JSON.stringify(settings,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='JustDraw_settings.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  showToast('📤 הגדרות יוצאו');
+}
+
+function importSettings(){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='.json';
+  inp.onchange=e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const s=JSON.parse(ev.target.result);
+        if(s.bbSortOrder) localStorage.setItem('bbSortOrder',s.bbSortOrder);
+        if(s.savedSwatches) localStorage.setItem('savedSwatches',s.savedSwatches);
+        showToast('📥 הגדרות יובאו — טוען מחדש...');
+        setTimeout(()=>location.reload(),1000);
+      }catch(e){showToast('⚠️ שגיאה בקובץ');}
+    };
+    reader.readAsText(file);
+  };
+  document.body.appendChild(inp); inp.click(); document.body.removeChild(inp);
 }
 
 function closeSortPanel(){
