@@ -580,11 +580,7 @@ body{ position:fixed; overflow:hidden; }
   <button class="tool-btn" onclick="copyCanvas()"><span class="icon">📋</span><span class="lbl">העתק</span></button>
   <button class="tool-btn" onclick="downloadCanvas()"><span class="icon">💾</span><span class="lbl">שמור</span></button>
   <button class="tool-btn" onclick="pickSaveFolder()" title="בחר תיקיית שמירה"><span class="icon">📁</span><span class="lbl">תיקייה</span></button>
-  <button class="tool-btn" onclick="clearAll()" style="color:#e94560"><span class="icon">🗑️</span><span class="lbl">נקה</span></button>
-  <div class="vdiv"></div>
-  <button class="tool-btn" onclick="openPuzzle()"><span class="icon">🧩</span><span class="lbl">פאזל</span></button>
-  <div class="vdiv"></div>
-  <button class="tool-btn" id="bbEditBtn"><span class="icon">↕️</span><span class="lbl">סדר</span></button>
+  <button class="tool-btn" onclick="clearAll()" style="color:#e94560"><span class="icon">🗑️</span><span class="lbl">נקה</span></button><button class="tool-btn" id="bbEditBtn"><span class="icon">↕️</span><span class="lbl">סדר</span></button>
   <button class="tool-btn" onclick="toggleHelp()"><span class="icon">❓</span><span class="lbl">עזרה</span></button>
 </div>
 
@@ -3470,7 +3466,7 @@ window.addEventListener('load',()=>{
   // edit button - short press = select mode, long press = sort panel
   let bbEditTimer=null;
   document.getElementById('bbEditBtn').addEventListener('pointerdown',e=>{
-    bbEditTimer=setTimeout(()=>{bbEditTimer=null;openSortPanel();},600);
+    bbEditTimer=setTimeout(()=>{bbEditTimer=null;openSortPanel();},400);
   },{passive:true});
   document.getElementById('bbEditBtn').addEventListener('pointerup',e=>{
     if(bbEditTimer){clearTimeout(bbEditTimer);bbEditTimer=null;toggleBbEdit();}
@@ -4055,7 +4051,6 @@ function buildHelp(){
     ['💾','שמור','PNG. ברירת מחדל: "ציור תאריך שעה".'],
     ['📁','תיקייה','בחר תיקיית שמירה קבועה.'],
     ['🗑️','נקה','מחיקת כל הציור עם אישור.'],
-    ['🧩','פאזל','המר לפאזל.'],
     ['↕️','סדר','לחיצה קצרה: בחר→לחץ יעד להזזת כפתורים. לחיצה ארוכה: פאנל עם ↑↓, 📤 יצוא הגדרות, 📥 יבוא הגדרות, ↺ איפוס.'],
     ['❓','עזרה','מסך זה — בסוף הסרגל התחתון.'],
   ])+
@@ -4065,11 +4060,12 @@ function buildHelp(){
     ['📏🔵✌️','סרגל/מחוגה','סיבוב. לחלופין ± בסרגל העליון.'],
   ]);
 }
-function openPuzzle(){
-  const tmp=getFlatCanvas();
-  localStorage.setItem('drawCanvas_image', tmp.toDataURL('image/png'));
-  showToast('🧩 שמור את קובץ הפאזל ופתח אותו');
-}
+
+
+
+
+
+
 function showToast(msg){
   const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
   clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2400);
