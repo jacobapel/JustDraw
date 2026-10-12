@@ -409,11 +409,7 @@ body{ position:fixed; overflow:hidden; }
     <button id="btnPin"   onclick="compassPin()"   style="padding:7px 14px;border-radius:10px;background:#1a3a6a;border:1.5px solid #4488cc;color:#88ccff;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;">📍 הצמד חוד</button>
     <button id="btnCDraw" onclick="compassDraw()"  style="padding:7px 14px;border-radius:10px;background:#0f3460;border:1.5px solid #2a2a4a;color:var(--muted);font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;" disabled>✏️ התחל ציור</button>
     <button id="btnCStop" onclick="compassStop()"  style="padding:7px 14px;border-radius:10px;background:#2a1a1a;border:1.5px solid #664444;color:#ff6b6b;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;" disabled>🔓 שחרר חוד</button>
-    <span style="display:flex;align-items:center;gap:4px;margin-right:auto;">
-      <button id="btnRadMinus" onpointerdown="startRadAdj(-1)" onpointerup="stopRadAdj()" onpointercancel="stopRadAdj()" style="padding:5px 13px;border-radius:8px;background:#1a2a3a;border:1.5px solid #4488cc;color:#88ccff;font-size:18px;cursor:pointer;line-height:1;">−</button>
-      <span id="compassInfo" style="font-size:12px;color:var(--muted);min-width:70px;text-align:center;"></span>
-      <button id="btnRadPlus"  onpointerdown="startRadAdj(+1)" onpointerup="stopRadAdj()" onpointercancel="stopRadAdj()" style="padding:5px 13px;border-radius:8px;background:#1a2a3a;border:1.5px solid #4488cc;color:#88ccff;font-size:18px;cursor:pointer;line-height:1;">+</button>
-    </span>
+    <span id="compassInfo" style="font-size:12px;color:var(--muted);margin-right:auto;"></span>
   </div>
   <div class="rh" id="rh-tl" data-h="tl"></div>
   <div class="rh" id="rh-tc" data-h="tc"></div>
@@ -1288,34 +1284,6 @@ function compassStop(){
   document.getElementById('btnCDraw').disabled=true;document.getElementById('btnCDraw').textContent='✏️ התחל ציור';
   document.getElementById('btnCStop').disabled=true;
   showToast('🔓 חוד שוחרר');drawCompassOverlay();
-}
-
-// ── radius +/- buttons ──
-let _radAdjTimer=null, _radAdjDir=0, _radAdjStep=1;
-function adjustRadius(delta){
-  // Scale the hinge position away from/toward the center (pin or needle tip)
-  // keeping both arm angles fixed — this changes the radius proportionally
-  const center = C.pin ? C.pin : compassTips().needle;
-  const curR = Math.hypot(compassTips().pencil.x-center.x, compassTips().pencil.y-center.y);
-  if(curR < 2) return;
-  const newR = Math.max(10, curR + delta);
-  const ratio = newR / curR;
-  C.pos = {x: center.x + (C.pos.x - center.x)*ratio,
-           y: center.y + (C.pos.y - center.y)*ratio};
-  drawCompassOverlay();
-}
-function startRadAdj(dir){
-  stopRadAdj();
-  _radAdjDir=dir; _radAdjStep=1;
-  adjustRadius(dir);
-  _radAdjTimer=setInterval(()=>{
-    _radAdjStep=Math.min(_radAdjStep+0.15,8); // accelerate
-    adjustRadius(dir*_radAdjStep);
-  },80);
-}
-function stopRadAdj(){
-  if(_radAdjTimer){clearInterval(_radAdjTimer);_radAdjTimer=null;}
-  _radAdjStep=1;
 }
 const selBar   = document.getElementById('selBar');
 const pieceRail = document.getElementById('pieceRail');
