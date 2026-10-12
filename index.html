@@ -659,6 +659,9 @@ body{ position:fixed; overflow:hidden; }
 </div>
 
 <script>
+// ── VERSION ──
+const APP_VERSION = '1.1';
+
 // ── ELEMENTS ──
 const MC   = document.getElementById('mainCanvas');
 const IKC  = document.getElementById('inkCanvas');
@@ -1058,6 +1061,28 @@ function drawCompassOverlay(){
     cCtx.setLineDash([]);
     const ci=document.getElementById('compassInfo');
     if(ci) ci.textContent='רדיוס: '+Math.round(r)+'px';
+
+    // draw label — fixed top-left corner of canvas
+    cCtx.font='bold 15px Heebo,Arial,sans-serif';
+    cCtx.textAlign='left';cCtx.textBaseline='middle';
+    let txt, bgColor;
+    if(!C.drawing){
+      txt='r = '+Math.round(r)+' px';
+      bgColor='rgba(0,0,0,0.6)';
+    } else {
+      const arcDeg=Math.round(Math.abs(C._arcTotal||0)*180/Math.PI);
+      txt=arcDeg+'°';
+      bgColor='rgba(30,60,180,0.7)';
+    }
+    const tw=cCtx.measureText(txt).width;
+    const bw=tw+18, bh=28, bx=10, by=10;
+    cCtx.fillStyle=bgColor;
+    cCtx.beginPath();
+    if(cCtx.roundRect){cCtx.roundRect(bx,by,bw,bh,6);}
+    else{cCtx.rect(bx,by,bw,bh);}
+    cCtx.fill();
+    cCtx.fillStyle='#ffffff';
+    cCtx.fillText(txt,bx+9,by+bh/2);
     cCtx.restore();
   }
 
@@ -1170,7 +1195,7 @@ function onCompassDown(e){
         C.drag='arc';
         const tx=C.pos.x+Math.cos(C.pencil)*ARM,ty=C.pos.y+Math.sin(C.pencil)*ARM;
         C.arcR=Math.hypot(tx-C.pin.x,ty-C.pin.y);
-        C.prevAngle=Math.atan2(ty-C.pin.y,tx-C.pin.x);C.arcMovedOnce=false;
+        C.prevAngle=Math.atan2(ty-C.pin.y,tx-C.pin.x);C.arcMovedOnce=false;C._arcTotal=0;
       } else C.drag='pencil-arm';
     } else C.drag='tap-only';
   }
@@ -1199,7 +1224,7 @@ function onCompassMove(e){
     const curAngle=Math.atan2(y-C.pin.y,x-C.pin.x);
     let delta=curAngle-C.prevAngle;
     while(delta>Math.PI)delta-=2*Math.PI;while(delta<-Math.PI)delta+=2*Math.PI;
-    if(!C.arcMovedOnce){C.arcMovedOnce=true;C.prevAngle=curAngle;return;}
+    if(!C.arcMovedOnce){C.arcMovedOnce=true;C.prevAngle=curAngle;C._arcTotal=0;return;}
     if(Math.abs(delta)<0.005||Math.abs(delta)>0.6){C.prevAngle=curAngle;return;}
     const steps=Math.max(2,Math.ceil(Math.abs(delta)*C.arcR/1.5));
     ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=thickness;ctx.lineCap='round';ctx.lineJoin='round';
@@ -1208,7 +1233,7 @@ function onCompassMove(e){
       const px2=C.pin.x+Math.cos(a)*C.arcR,py2=C.pin.y+Math.sin(a)*C.arcR;
       i===0?ctx.moveTo(px2,py2):ctx.lineTo(px2,py2);
     }
-    ctx.stroke();C.prevAngle=curAngle;
+    ctx.stroke();C._arcTotal=(C._arcTotal||0)+delta;C.prevAngle=curAngle;
     const opening=C.needle-C.pencil;C.pencil=curAngle;C.needle=curAngle+opening;
     C.pos.x=C.pin.x-Math.cos(C.needle)*ARM;C.pos.y=C.pin.y-Math.sin(C.needle)*ARM;
     drawCompassOverlay();
@@ -3461,6 +3486,23 @@ function resetSortOrder(){
 }
 
 window.addEventListener('load',()=>{
+  // ── VERSION CHECK: clear drawing data on upgrade, keep user settings ──
+  const storedVer = localStorage.getItem('appVersion');
+  if(storedVer !== APP_VERSION){
+    // save user settings before clearing
+    const savedSwatches  = localStorage.getItem('savedSwatches');
+    const savedSortOrder = localStorage.getItem('bbSortOrder');
+    // clear IndexedDB drawing data (autosave + saves folder)
+    ['draw_canvas','drawCanvas'].forEach(dbName=>{
+      try{ indexedDB.deleteDatabase(dbName); }catch(e){}
+    });
+    // clear all localStorage except settings we want to keep
+    localStorage.clear();
+    if(savedSwatches)  localStorage.setItem('savedSwatches',  savedSwatches);
+    if(savedSortOrder) localStorage.setItem('bbSortOrder',    savedSortOrder);
+    localStorage.setItem('appVersion', APP_VERSION);
+  }
+
   const bar=document.getElementById('bottomBar');
   // edit button
   // edit button - short press = select mode, long press = sort panel
