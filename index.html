@@ -399,6 +399,7 @@ body{ position:fixed; overflow:hidden; }
   </div>
   <canvas id="rulerCanvas" style="position:absolute;top:0;left:0;z-index:15;display:none;touch-action:none;"></canvas>
   <canvas id="compassCanvas" style="position:absolute;top:0;left:0;z-index:15;display:none;touch-action:none;"></canvas>
+  <canvas id="cutCanvas"    style="position:absolute;top:0;left:0;z-index:16;display:none;touch-action:none;cursor:crosshair;"></canvas>
 
   <!-- compass controls (bottom sheet style) -->
   <div id="compassCtrl" style="display:none;position:fixed;bottom:var(--bar-h);left:0;right:0;
@@ -411,6 +412,88 @@ body{ position:fixed; overflow:hidden; }
     <button id="btnCStop" onclick="compassStop()"  style="padding:7px 14px;border-radius:10px;background:#2a1a1a;border:1.5px solid #664444;color:#ff6b6b;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;" disabled>🔓 שחרר חוד</button>
     <span id="compassInfo" style="font-size:12px;color:var(--muted);margin-right:auto;"></span>
   </div>
+
+  <!-- cut/region controls -->
+  <div id="cutCtrl" style="display:none;position:fixed;bottom:var(--bar-h);left:0;right:0;
+    z-index:50;background:var(--panel);border-top:2px solid #e9a020;
+    border-radius:16px 16px 0 0;padding:6px 14px 8px;
+    flex-direction:column;gap:6px;
+    box-shadow:0 -4px 20px rgba(0,0,0,.5);">
+
+    <!-- שורה קצרה — תמיד נראית -->
+    <div id="cutRowShort" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <button onclick="cutToggleExpand()" id="cutExpandBtn"
+        style="background:none;border:none;color:#f0c060;font-size:15px;cursor:pointer;padding:0;line-height:1;">⚙️</button>
+      <span style="font-size:13px;color:#f0c060;font-weight:600;">✂️ חותך</span>
+      <button id="cutCopyBtn" disabled onclick="cutCopyResult()"
+        style="padding:5px 11px;border-radius:10px;background:#3a2a00;border:1.5px solid #e9a020;color:#f0c060;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;"
+        title="מעתיק PNG ללוח — אפשר להדביק בציור אחר">📋 העתק ללוח</button>
+      <button id="cutPasteBtn" disabled onclick="cutStartPasteMode()"
+        style="padding:5px 11px;border-radius:10px;background:#1a3a1a;border:1.5px solid #44bb44;color:#88ff88;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;"
+        title="לחץ, ואז לחץ על הציור כדי להדביק שם">🖼️ הדבק לפי נגיעה</button>
+      <button onclick="cutClear()"
+        style="padding:5px 11px;border-radius:10px;background:#2a1a1a;border:1.5px solid #664444;color:#ff6b6b;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">✖ נקה</button>
+      <span id="cutStatus" style="font-size:12px;color:#aaa;"></span>
+    </div>
+
+    <!-- קטע מורחב — נפתח בלחיצת ⚙️ -->
+    <div id="cutExpandSection" style="display:none;flex-direction:column;gap:8px;padding-top:4px;border-top:1px solid #2a2a4a;">
+
+      <!-- בחירה -->
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--muted);min-width:44px;">בחירה:</span>
+        <div style="display:flex;border:1px solid #3a3a5a;border-radius:8px;overflow:hidden;font-size:12px;">
+          <label style="cursor:pointer;"><input type="radio" name="cutMode" id="cutModeNew" value="new" checked style="display:none;">
+            <span id="cutModeNewLbl" style="display:block;padding:4px 10px;background:#1a3560;color:#aaccff;">חדשה</span></label>
+          <label style="cursor:pointer;"><input type="radio" name="cutMode" id="cutModeAdd" value="add" style="display:none;">
+            <span id="cutModeAddLbl" style="display:block;padding:4px 10px;background:transparent;color:var(--muted);">+ הוסף שטח</span></label>
+        </div>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;">
+          <input type="checkbox" id="cutHoles" checked style="accent-color:#e9a020;"> כלול פנים
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);">
+          רגישות: <input type="range" id="cutTol" min="0" max="100" value="30" style="width:70px;accent-color:#e9a020;">
+          <span id="cutTolVal" style="min-width:22px;">30</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;">
+          <input type="checkbox" id="cutAuto" checked style="accent-color:#e9a020;"> העתק אוטומטית
+        </label>
+      </div>
+
+      <!-- פלט -->
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--muted);min-width:44px;">פלט:</span>
+        <div style="display:flex;border:1px solid #3a3a5a;border-radius:8px;overflow:hidden;font-size:11px;">
+          <label style="cursor:pointer;"><input type="radio" name="cutFrame" id="cutFrameNo" value="without" style="display:none;">
+            <span id="cutFrameNoLbl" style="display:block;padding:3px 8px;background:transparent;color:var(--muted);">ללא מסגרת</span></label>
+          <label style="cursor:pointer;"><input type="radio" name="cutFrame" id="cutFrameYes" value="with" checked style="display:none;">
+            <span id="cutFrameYesLbl" style="display:block;padding:3px 8px;background:#1a3560;color:#aac;">+ מסגרת</span></label>
+        </div>
+        <label id="cutBorderRow" style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);">
+          עובי: <input type="range" id="cutBorder" min="1" max="24" value="1" style="width:60px;accent-color:#e9a020;">
+          <span id="cutBorderVal" style="min-width:22px;">1px</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer;">
+          <input type="checkbox" id="cutOutline" checked style="accent-color:#e9a020;"> קו צבעוני
+        </label>
+        <div id="cutOutlineOpts" style="display:flex;align-items:center;gap:6px;">
+          <div id="cutSwatches" style="display:flex;gap:4px;"></div>
+          <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted);">
+            עובי: <input type="range" id="cutThick" min="1" max="16" value="4" style="width:55px;accent-color:#e9a020;">
+            <span id="cutThickVal" style="min-width:20px;">4px</span>
+          </label>
+        </div>
+        <div style="display:flex;border:1px solid #3a3a5a;border-radius:8px;overflow:hidden;font-size:11px;">
+          <label style="cursor:pointer;"><input type="radio" name="cutBg" id="cutBgT" value="transparent" checked style="display:none;">
+            <span id="cutBgTLbl" style="display:block;padding:3px 8px;background:#1a3560;color:#aac;">שקוף</span></label>
+          <label style="cursor:pointer;"><input type="radio" name="cutBg" id="cutBgW" value="white" style="display:none;">
+            <span id="cutBgWLbl" style="display:block;padding:3px 8px;background:transparent;color:var(--muted);">לבן</span></label>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <div class="rh" id="rh-tl" data-h="tl"></div>
   <div class="rh" id="rh-tc" data-h="tc"></div>
   <div class="rh" id="rh-tr" data-h="tr"></div>
@@ -563,6 +646,9 @@ body{ position:fixed; overflow:hidden; }
   </button>
   <button class="tool-btn" id="btnCompass" onclick="setMode('compass')">
     <span class="icon">🔵</span><span class="lbl">מחוגה</span>
+  </button>
+  <button class="tool-btn" id="btnCut" onclick="setMode('cut')">
+    <span class="icon">✂️</span><span class="lbl">חותך</span>
   </button>
   <div class="vdiv"></div>
   <button class="tool-btn" id="btnMirrorH" onclick="toggleMirror('h')">
@@ -1285,6 +1371,377 @@ function compassStop(){
   document.getElementById('btnCStop').disabled=true;
   showToast('🔓 חוד שוחרר');drawCompassOverlay();
 }
+// ══════════════════════════════════════
+//  REGION CUTTER (✂️)
+// ══════════════════════════════════════
+const cutC2 = document.getElementById('cutCanvas');
+const cutCtx2 = cutC2 ? cutC2.getContext('2d') : null;
+let cutSel=null, cutSelBB=null, cutSeeds=[], cutOutCanvas=null;
+// last click position in canvas coords (for paste-at-touch)
+let cutLastX=0, cutLastY=0;
+
+const CUT_COLORS=['#E2581A','#D62828','#1D4ED8','#0E9F6E','#7C3AED','#F5C518','#111111','#FFFFFF'];
+let cutOpts={tol:30,mode:'new',holes:true,frame:'with',border:1,outline:true,color:CUT_COLORS[0],thick:4,bg:'transparent',auto:true,pasteAtTouch:true};
+
+// build colour swatches
+(function(){
+  const sw=document.getElementById('cutSwatches'); if(!sw)return;
+  CUT_COLORS.forEach((c,i)=>{
+    const b=document.createElement('button');
+    b.style.cssText='width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;flex-shrink:0;background:'+c;
+    if(i===0)b.style.borderColor='#fff';
+    b.title=c;
+    b.addEventListener('click',()=>{
+      cutOpts.color=c;
+      sw.querySelectorAll('button').forEach(x=>x.style.borderColor='transparent');
+      b.style.borderColor='#fff';
+      cutChanged();
+    });
+    sw.appendChild(b);
+  });
+})();
+
+// wire all cutCtrl controls
+(function(){
+  function syncSeg(radioName, lblMap){
+    document.querySelectorAll('input[name="'+radioName+'"]').forEach(r=>{
+      r.addEventListener('change',()=>{
+        document.querySelectorAll('input[name="'+radioName+'"]').forEach(x=>{
+          const lbl=document.getElementById(lblMap[x.value]);
+          if(lbl) lbl.style.background=x.checked?'#1a3560':'transparent';
+          if(lbl) lbl.style.color=x.checked?'#aaccff':'var(--muted)';
+        });
+      });
+    });
+  }
+  syncSeg('cutMode',{new:'cutModeNewLbl',add:'cutModeAddLbl'});
+  syncSeg('cutFrame',{without:'cutFrameNoLbl',with:'cutFrameYesLbl'});
+  syncSeg('cutBg',{transparent:'cutBgTLbl',white:'cutBgWLbl'});
+
+  document.querySelectorAll('input[name="cutMode"]').forEach(r=>r.addEventListener('change',e=>{cutOpts.mode=e.target.value;}));
+  document.querySelectorAll('input[name="cutFrame"]').forEach(r=>r.addEventListener('change',e=>{
+    cutOpts.frame=e.target.value;
+    const row=document.getElementById('cutBorderRow');
+    if(row) row.style.display=cutOpts.frame==='with'?'flex':'none';
+    cutChanged();
+  }));
+  document.querySelectorAll('input[name="cutBg"]').forEach(r=>r.addEventListener('change',e=>{cutOpts.bg=e.target.value;cutChanged();}));
+
+  const border=document.getElementById('cutBorder');
+  if(border) border.addEventListener('input',e=>{cutOpts.border=parseInt(e.target.value);const v=document.getElementById('cutBorderVal');if(v)v.textContent=e.target.value+'px';cutChanged();});
+
+  const outline=document.getElementById('cutOutline');
+  if(outline) outline.addEventListener('change',e=>{cutOpts.outline=e.target.checked;const oo=document.getElementById('cutOutlineOpts');if(oo)oo.style.display=e.target.checked?'flex':'none';cutChanged();});
+
+  const thick=document.getElementById('cutThick');
+  if(thick) thick.addEventListener('input',e=>{cutOpts.thick=parseInt(e.target.value);const v=document.getElementById('cutThickVal');if(v)v.textContent=e.target.value+'px';cutChanged();});
+
+  const autoChk=document.getElementById('cutAuto');
+  if(autoChk) autoChk.addEventListener('change',e=>{cutOpts.auto=e.target.checked;});
+
+  const patChk=document.getElementById('cutPasteAtTouch');
+  if(patChk) patChk.addEventListener('change',e=>{cutOpts.pasteAtTouch=e.target.checked;});
+})();
+
+function cutChanged(){
+  if(!cutSel||!cutSelBB)return;
+  const MC2=document.getElementById('mainCanvas');
+  const sCtx2=MC2.getContext('2d',{willReadFrequently:true});
+  const pix2=sCtx2.getImageData(0,0,MC2.width,MC2.height).data;
+  cutBuildOutput(pix2,MC2.width,MC2.height);
+  if(cutOpts.auto) cutCopyResult();
+}
+
+function cutReset(){
+  cutSel=null; cutSelBB=null; cutSeeds=[]; cutOutCanvas=null;
+  cutPasteMode=false;
+  if(cutC2) cutC2.style.cursor='crosshair';
+  if(cutCtx2) cutCtx2.clearRect(0,0,cutC2.width,cutC2.height);
+  const cb=document.getElementById('cutCopyBtn'); if(cb) cb.disabled=true;
+  const pb=document.getElementById('cutPasteBtn');
+  if(pb){pb.disabled=true;pb.style.background='#1a3a1a';pb.style.borderColor='#44bb44';}
+  const st=document.getElementById('cutStatus'); if(st) st.textContent='';
+}
+
+function cutFlood(pix,W,H,sx,sy,tol){
+  const n=W*H, m=new Uint8Array(n), st2=new Int32Array(n); let sp=0;
+  const p0=(sy*W+sx)*4, r0=pix[p0],g0=pix[p0+1],b0=pix[p0+2],a0=pix[p0+3];
+  const lim=(tol*3)*(tol*3);
+  const ok=i=>{const j=i*4,dr=pix[j]-r0,dg=pix[j+1]-g0,db=pix[j+2]-b0,da=pix[j+3]-a0;return dr*dr+dg*dg+db*db+da*da<=lim;};
+  const s=sy*W+sx; m[s]=1; st2[sp++]=s;
+  while(sp){const i=st2[--sp], x=i%W; let q;
+    if(x>0){q=i-1;if(!m[q]&&ok(q)){m[q]=1;st2[sp++]=q;}}
+    if(x<W-1){q=i+1;if(!m[q]&&ok(q)){m[q]=1;st2[sp++]=q;}}
+    if(i>=W){q=i-W;if(!m[q]&&ok(q)){m[q]=1;st2[sp++]=q;}}
+    if(i<n-W){q=i+W;if(!m[q]&&ok(q)){m[q]=1;st2[sp++]=q;}}
+  }
+  return m;
+}
+function cutBbox(m,W,H){
+  let x0=W,y0=H,x1=-1,y1=-1;
+  for(let y=0;y<H;y++){const o=y*W;for(let x=0;x<W;x++)if(m[o+x]){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;y1=y;}}
+  return x1<0?null:[x0,y0,x1,y1];
+}
+function cutFillHoles(m,bb,W,H){
+  const [x0,y0,x1,y1]=bb, bw=x1-x0+3, bh=y1-y0+3, n=bw*bh;
+  const r=new Uint8Array(n), st2=new Int32Array(n); let sp=0;
+  const isM=(lx,ly)=>!(lx===0||ly===0||lx===bw-1||ly===bh-1)&&m[(y0-1+ly)*W+(x0-1+lx)]===1;
+  for(let lx=0;lx<bw;lx++){for(const ly of [0,bh-1]){const i=ly*bw+lx;if(!r[i]){r[i]=1;st2[sp++]=i;}}}
+  for(let ly=1;ly<bh-1;ly++){for(const lx of [0,bw-1]){const i=ly*bw+lx;if(!r[i]){r[i]=1;st2[sp++]=i;}}}
+  while(sp){const i=st2[--sp],lx=i%bw,ly=(i/bw)|0;
+    for(const [ax,ay] of [[lx-1,ly],[lx+1,ly],[lx,ly-1],[lx,ly+1]]){
+      if(ax<0||ay<0||ax>=bw||ay>=bh)continue;const q=ay*bw+ax;if(!r[q]&&!isM(ax,ay)){r[q]=1;st2[sp++]=q;}}}
+  for(let ly=1;ly<bh-1;ly++)for(let lx=1;lx<bw-1;lx++){if(!r[ly*bw+lx])m[(y0-1+ly)*W+(x0-1+lx)]=1;}
+  return m;
+}
+
+function cutSelectAt(cx,cy){
+  cutLastX=cx; cutLastY=cy;
+  const MC2=document.getElementById('mainCanvas');
+  const W2=MC2.width, H2=MC2.height;
+  const tol=parseInt(document.getElementById('cutTol')?.value||cutOpts.tol);
+  const holes=document.getElementById('cutHoles')?.checked!==false;
+  const sCtx2=MC2.getContext('2d',{willReadFrequently:true});
+  const pix2=sCtx2.getImageData(0,0,W2,H2).data;
+  const flooded=cutFlood(pix2,W2,H2,cx,cy,tol);
+  const bb=cutBbox(flooded,W2,H2);
+  if(!bb){cutStatus('לא נמצא שטח סגור כאן.');return;}
+  const filled=holes?cutFillHoles(flooded.slice(),bb,W2,H2):flooded;
+  if(cutOpts.mode==='add'&&cutSel){
+    // merge
+    for(let i=0;i<filled.length;i++) if(filled[i]) cutSel[i]=1;
+    cutSelBB=cutBbox(cutSel,W2,H2);
+  } else {
+    cutSeeds=[[cx,cy]];
+    cutSel=filled; cutSelBB=bb;
+  }
+  cutDrawOverlay(pix2,W2,H2);
+  cutBuildOutput(pix2,W2,H2);
+  if(cutOpts.auto) cutCopyResult();
+}
+function cutStatus(msg){const s=document.getElementById('cutStatus');if(s)s.textContent=msg||'';}
+
+function cutDrawOverlay(pix2,W2,H2){
+  if(!cutCtx2||!cutSel||!cutSelBB) return;
+  cutCtx2.clearRect(0,0,cutC2.width,cutC2.height);
+  const [x0,y0,x1,y1]=cutSelBB, w=x1-x0+1, h=y1-y0+1;
+  const id=cutCtx2.createImageData(w,h), o=id.data;
+  const e=Math.max(2,Math.round(Math.max(W2,H2)/500));
+  const inM=(x,y)=>x>=0&&y>=0&&x<W2&&y<H2&&cutSel[y*W2+x]===1;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const X=x0+x,Y=y0+y; if(!cutSel[Y*W2+X])continue;
+    let edge=false;for(let k=1;k<=e&&!edge;k++)edge=!inM(X-k,Y)||!inM(X+k,Y)||!inM(X,Y-k)||!inM(X,Y+k);
+    const j=(y*w+x)*4; o[j]=233;o[j+1]=160;o[j+2]=32;o[j+3]=edge?230:60;
+  }
+  cutCtx2.putImageData(id,x0,y0);
+}
+
+function cutDistField(m,bb,W2,H2,R){
+  const ex0=Math.max(0,bb[0]-R), ey0=Math.max(0,bb[1]-R);
+  const ex1=Math.min(W2-1,bb[2]+R), ey1=Math.min(H2-1,bb[3]+R);
+  const dw=ex1-ex0+1, dh=ey1-ey0+1, d=new Uint16Array(dw*dh);
+  for(let y=0;y<dh;y++)for(let x=0;x<dw;x++) d[y*dw+x]=m[(ey0+y)*W2+ex0+x]?0:65535;
+  for(let y=0;y<dh;y++)for(let x=0;x<dw;x++){const i=y*dw+x;let v=d[i];if(!v)continue;
+    if(x>0)v=Math.min(v,d[i-1]+3);
+    if(y>0){v=Math.min(v,d[i-dw]+3);if(x>0)v=Math.min(v,d[i-dw-1]+4);if(x<dw-1)v=Math.min(v,d[i-dw+1]+4);}
+    d[i]=v;}
+  for(let y=dh-1;y>=0;y--)for(let x=dw-1;x>=0;x--){const i=y*dw+x;let v=d[i];if(!v)continue;
+    if(x<dw-1)v=Math.min(v,d[i+1]+3);
+    if(y<dh-1){v=Math.min(v,d[i+dw]+3);if(x<dw-1)v=Math.min(v,d[i+dw+1]+4);if(x>0)v=Math.min(v,d[i+dw-1]+4);}
+    d[i]=v;}
+  return {d,ex0,ey0,dw,dh};
+}
+
+function cutHexToRgb(c){c=c.replace('#','');if(c.length===3)c=c.split('').map(x=>x+x).join('');const v=parseInt(c,16);return[v>>16&255,v>>8&255,v&255];}
+
+function cutBuildOutput(pix2,W2,H2){
+  if(!cutSel||!cutSelBB){return;}
+  const b=cutOpts.frame==='with'?cutOpts.border:0;
+  const t=cutOpts.outline?cutOpts.thick:0;
+  const R=b+t;
+  // בנה dist field עם padding מספיק
+  const pad=Math.max(R+2,4);
+  const {d,ex0,ey0,dw,dh}=cutDistField(cutSel,cutSelBB,W2,H2,pad);
+  const lb=b*3, lt=R*3;
+  // crop = כל ה-distField (כולל padding)
+  const ow=dw, oh=dh;
+  cutOutCanvas=document.createElement('canvas');
+  cutOutCanvas.width=ow; cutOutCanvas.height=oh;
+  // שמור offset כדי לדעת היכן למקם בציור
+  cutOutCanvas._ox=ex0; cutOutCanvas._oy=ey0;
+  const octx=cutOutCanvas.getContext('2d');
+  const id=new ImageData(ow,oh), o=id.data;
+  const [cr,cg,cb2]=cutHexToRgb(cutOpts.color), white=cutOpts.bg==='white';
+  for(let y=0;y<oh;y++)for(let x=0;x<ow;x++){
+    const dd=d[y*dw+x], j=(y*ow+x)*4;
+    const gx=ex0+x, gy=ey0+y;
+    const inSel=gx>=0&&gy>=0&&gx<W2&&gy<H2&&cutSel[gy*W2+gx]===1;
+    if(inSel){
+      // פיקסל בתוך הבחירה — צבע מהציור המקורי
+      const s=(gy*W2+gx)*4;
+      o[j]=pix2[s];o[j+1]=pix2[s+1];o[j+2]=pix2[s+2];o[j+3]=255;
+    } else if(b&&dd>0&&dd<=lb){
+      // מסגרת — צבע מהציור (ממשיך מהצורה החוצה)
+      const gx2=Math.max(0,Math.min(W2-1,gx)), gy2=Math.max(0,Math.min(H2-1,gy));
+      const s=(gy2*W2+gx2)*4;
+      o[j]=pix2[s];o[j+1]=pix2[s+1];o[j+2]=pix2[s+2];o[j+3]=255;
+    } else if(t&&dd>0&&dd<=lt){
+      // קו מתאר צבעוני
+      o[j]=cr;o[j+1]=cg;o[j+2]=cb2;o[j+3]=255;
+    } else if(white){
+      // מחוץ לבחירה, רקע לבן
+      o[j]=o[j+1]=o[j+2]=255;o[j+3]=255;
+    }
+    // else: שקוף — alpha נשאר 0
+  }
+  octx.putImageData(id,0,0);
+  const cb3=document.getElementById('cutCopyBtn'); if(cb3) cb3.disabled=false;
+  const pb=document.getElementById('cutPasteBtn'); if(pb) pb.disabled=false;
+  const [bx0,by0,bx1,by1]=cutSelBB;
+  cutStatus('שטח נבחר: '+(bx1-bx0+1)+' × '+(by1-by0+1)+' px');
+}
+
+async function cutCopyResult(){
+  if(!cutOutCanvas){cutStatus('קודם בחר שטח.');return;}
+  try{
+    const blob=await new Promise(res=>cutOutCanvas.toBlob(res,'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+    cutStatus('✅ הועתק ללוח!');
+  }catch(e){cutStatus('⚠️ לא הצליח להעתיק — נסה לחיצה ימנית על הציור.');}
+}
+
+let cutPasteMode=false; // waiting for tap to place
+
+function cutStartPasteMode(){
+  if(!cutOutCanvas){cutStatus('קודם בחר שטח.');return;}
+  cutPasteMode=true;
+  cutStatus('🖱️ לחץ על הציור כדי להדביק שם...');
+  // visual cue on button
+  const pb=document.getElementById('cutPasteBtn');
+  if(pb){pb.style.background='#0a5a0a';pb.style.borderColor='#88ff88';}
+  // change cursor on cutCanvas
+  if(cutC2) cutC2.style.cursor='copy';
+}
+
+function cutDoPasteAt(cx,cy){
+  if(!cutOutCanvas)return;
+  cutPasteMode=false;
+  if(cutC2) cutC2.style.cursor='crosshair';
+  const pb=document.getElementById('cutPasteBtn');
+  if(pb){pb.style.background='#1a3a1a';pb.style.borderColor='#44bb44';}
+  // הצג כ-piece ניתן לגרירה — מרכז על נקודת הנגיעה
+  cutDoPasteAsPiece(cx, cy);
+  cutStatus('✅ גרור למיקום הרצוי ולחץ 📌 קבע');
+}
+
+// הדבק כ-piece ניתן לגרירה (משמש עבור "ציור חדש" / Ctrl+V)
+function cutDoPasteAsPiece(startX, startY){
+  if(!cutOutCanvas)return;
+  const bw=cutOutCanvas.width, bh=cutOutCanvas.height;
+  // stamp old piece if exists
+  if(piece) stampPiece();
+
+  // שמור את cutOutCanvas ישירות — ללא getImageData (בעייתי ב-Android)
+  const ox=cutOutCanvas._ox||0, oy=cutOutCanvas._oy||0;
+  let fx, fy;
+  if(startX!=null && startY!=null){
+    const [bbx0,bby0,bbx1,bby1]=cutSelBB||[ox,oy,ox+bw,oy+bh];
+    const shapeCX=((bbx0+bbx1)/2) - ox;
+    const shapeCY=((bby0+bby1)/2) - oy;
+    fx=Math.round(startX - shapeCX);
+    fy=Math.round(startY - shapeCY);
+  } else {
+    fx=ox; fy=oy;
+  }
+
+  // צור ImageData מה-canvas (לצרכי תאימות עם שאר הקוד)
+  // שמור גם את ה-canvas המקורי כ-sourceCanvas לציור מהיר
+  const srcCanvas=document.createElement('canvas');
+  srcCanvas.width=bw; srcCanvas.height=bh;
+  srcCanvas.getContext('2d').drawImage(cutOutCanvas,0,0);
+
+  // imageData לצרכי stampPiece וכו'
+  const dummyData=srcCanvas.getContext('2d').getImageData(0,0,bw,bh);
+
+  piece={
+    imageData:dummyData,
+    origImageData:dummyData,
+    sourceCanvas:srcCanvas,
+    origX:fx, origY:fy,
+    w:bw, h:bh,
+    floatX:fx, floatY:fy,
+    angle:0,flipHProg:0,flipVProg:0,
+    blendMode:'source-over', opacity:1,
+    isDragging:false,dsx:0,dsy:0,dox:0,doy:0,
+    fromCutter:true
+  };
+  PC.style.display='block';
+  PC.style.pointerEvents='auto';
+  PC.style.cursor='grab';
+  PC.style.zIndex='20';
+  if(cutC2) cutC2.style.pointerEvents='none';
+  clearSel();
+  redrawPiece();
+  showPieceBar();
+  showToast('✂️ גרור למיקום הרצוי ולחץ 📌 קבע');
+}
+
+function cutClear(){
+  cutReset();
+  cutStatus('');
+}
+
+function cutToggleExpand(){
+  const sec=document.getElementById('cutExpandSection');
+  const btn=document.getElementById('cutExpandBtn');
+  if(!sec||!btn)return;
+  const open=sec.style.display==='flex';
+  sec.style.display=open?'none':'flex';
+  btn.textContent=open?'⚙️':'✖️';
+  btn.title=open?'הגדרות':'סגור הגדרות';
+}
+
+// אירועי לחיצה על canvas החיתוך
+if(cutC2){
+  cutC2.addEventListener('pointerdown',e=>{
+    if(mode!=='cut')return;
+    e.preventDefault();
+    const rect=cutC2.getBoundingClientRect();
+    const scaleX=MC.width/rect.width, scaleY=MC.height/rect.height;
+    const x=Math.round((e.clientX-rect.left)*scaleX);
+    const y=Math.round((e.clientY-rect.top)*scaleY);
+    if(cutPasteMode){
+      cutDoPasteAt(x,y);
+    } else {
+      cutSelectAt(x,y);
+    }
+  },{passive:false});
+}
+// עדכון רגישות
+document.getElementById('cutTol')?.addEventListener('input',e=>{
+  cutOpts.tol=parseInt(e.target.value);
+  const v=document.getElementById('cutTolVal'); if(v) v.textContent=e.target.value;
+});
+document.getElementById('cutHoles')?.addEventListener('change',e=>{
+  cutOpts.holes=e.target.checked;
+  if(cutSeeds.length){
+    // re-run selection with new holes option
+    const MC2=document.getElementById('mainCanvas');
+    const W2=MC2.width,H2=MC2.height;
+    const sCtx2=MC2.getContext('2d',{willReadFrequently:true});
+    const pix2=sCtx2.getImageData(0,0,W2,H2).data;
+    // rebuild from seeds
+    const base=new Uint8Array(W2*H2);
+    for(const [sx,sy] of cutSeeds){const m=cutFlood(pix2,W2,H2,sx,sy,cutOpts.tol);for(let i=0;i<m.length;i++)if(m[i])base[i]=1;}
+    const bb=cutBbox(base,W2,H2); if(!bb)return;
+    cutSel=cutOpts.holes?cutFillHoles(base.slice(),bb,W2,H2):base;
+    cutSelBB=bb;
+    cutDrawOverlay(pix2,W2,H2);
+    cutBuildOutput(pix2,W2,H2);
+    if(cutOpts.auto) cutCopyResult();
+  }
+});
+
 const selBar   = document.getElementById('selBar');
 const pieceRail = document.getElementById('pieceRail');
 const pieceControlRow = document.getElementById('pieceControlRow');
@@ -1734,7 +2191,7 @@ document.addEventListener('keydown',e=>{
     if(e.key==='z'){e.preventDefault();undoAction();}
     if(e.key==='y'||(e.shiftKey&&e.key==='z')){e.preventDefault();redoAction();}
   }
-  if(e.key==='Escape'){commitText();clearSel();closeSpectrum();}
+  if(e.key==='Escape'){commitText();clearSel();closeSpectrum();if(cutPasteMode){cutPasteMode=false;if(cutC2)cutC2.style.cursor='crosshair';const pb=document.getElementById('cutPasteBtn');if(pb){pb.style.background='#1a3a1a';pb.style.borderColor='#44bb44';}cutStatus('בוטל.');}}
   if((e.key==='Delete'||e.key==='Backspace')&&selRect&&!piece) deleteSel();
 });
 
@@ -1744,13 +2201,26 @@ function setMode(m){
   if(m!=='rect'&&m!=='lasso'){clearSel();}
   if(piece) stampPiece();
   mode=m;
-  MC.style.pointerEvents=(m==='ruler'||m==='compass'||m==='zoom')?'none':'auto';
-  MC.style.cursor={draw:'crosshair',eraser:'cell',fill:'crosshair',text:'text',rect:'crosshair',lasso:'crosshair',shape:'crosshair',ruler:'default',compass:'default',natural:'crosshair',zoom:'move',eyedrop:'crosshair',scatter:'crosshair'}[m]||'crosshair';
-  // show/hide overlay canvases and compass controls
+  MC.style.pointerEvents=(m==='ruler'||m==='compass'||m==='cut'||m==='zoom')?'none':'auto';
+  MC.style.cursor={draw:'crosshair',eraser:'cell',fill:'crosshair',text:'text',rect:'crosshair',lasso:'crosshair',shape:'crosshair',ruler:'default',compass:'default',natural:'crosshair',zoom:'move',eyedrop:'crosshair',scatter:'crosshair',cut:'crosshair'}[m]||'crosshair';
+  // show/hide overlay canvases and compass/cut controls
   RC.style.display=m==='ruler'?'block':'none';
   CC.style.display=m==='compass'?'block':'none';
+  const cutC=document.getElementById('cutCanvas');
+  if(cutC){cutC.style.display=m==='cut'?'block':'none';}
   const cCtrl=document.getElementById('compassCtrl');
   if(cCtrl) cCtrl.style.display=m==='compass'?'flex':'none';
+  const cutCtrl=document.getElementById('cutCtrl');
+  if(cutCtrl) cutCtrl.style.display=m==='cut'?'flex':'none';
+  if(m==='cut'){
+    cutC.width=wrap.clientWidth; cutC.height=wrap.clientHeight;
+    // אל תאפס cutOutCanvas/cutPasteMode — המשתמש עשוי להיות באמצע הדבקה
+    cutSel=null; cutSelBB=null; cutSeeds=[];
+    if(cutCtx2) cutCtx2.clearRect(0,0,cutC2.width,cutC2.height);
+    showToast('✂️ לחץ על שטח סגור בציור כדי לחתוך אותו');
+  } else {
+    cutReset();
+  }
   if(m==='ruler'){
     RC.width=wrap.clientWidth;RC.height=wrap.clientHeight;
     zPtrs.clear(); zPinching=false; // release zoom
@@ -1764,7 +2234,7 @@ function setMode(m){
     showToast('🔵 גרור המחוגה • לחץ "הצמד חוד" לקיבוע');
   }
   document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
-  const idMap={draw:'btnDraw',eraser:'btnErase',fill:'btnFill',text:'btnText',rect:'btnRect',lasso:'btnLasso',shape:'btnShape',ruler:'btnRuler',compass:'btnCompass',natural:'btnNatural',eyedrop:'btnEyedrop',scatter:'btnScatter'};
+  const idMap={draw:'btnDraw',eraser:'btnErase',fill:'btnFill',text:'btnText',rect:'btnRect',lasso:'btnLasso',shape:'btnShape',ruler:'btnRuler',compass:'btnCompass',natural:'btnNatural',eyedrop:'btnEyedrop',scatter:'btnScatter',cut:'btnCut'};
   const el=document.getElementById(idMap[m]);
   if(el) el.classList.add('active');
   // show/hide natural brush intensity controls
@@ -2750,9 +3220,12 @@ function redrawPiece(){
   const cy=piece.floatY+piece.h/2;
   const rad=piece.angle*Math.PI/180;
 
-  const src=document.createElement('canvas');
-  src.width=piece.w; src.height=piece.h;
-  src.getContext('2d').putImageData(piece.imageData,0,0);
+  // השתמש ב-sourceCanvas אם קיים (מהחותך) — מהיר ומדויק יותר מ-putImageData
+  const src=piece.sourceCanvas || document.createElement('canvas');
+  if(!piece.sourceCanvas){
+    src.width=piece.w; src.height=piece.h;
+    src.getContext('2d').putImageData(piece.imageData,0,0);
+  }
 
   const blendMode=piece.blendMode||'source-over';
   const opacity=piece.xray ? 0.45 : (piece.opacity||1);
@@ -2795,14 +3268,16 @@ function redrawPiece(){
     pCtx.restore();
   }
 
-  // dashed border
-  pCtx.save();
-  pCtx.globalAlpha=0.7;
-  pCtx.setLineDash([5,4]);
-  pCtx.strokeStyle='#e94560';pCtx.lineWidth=1.5;
-  pCtx.strokeRect(piece.floatX,piece.floatY,piece.w,piece.h);
-  pCtx.setLineDash([]);
-  pCtx.restore();
+  // dashed border — רק אם לא מהחותך (החותך כבר מצייר קו מתאר על האובייקט)
+  if(!piece.fromCutter){
+    pCtx.save();
+    pCtx.globalAlpha=0.7;
+    pCtx.setLineDash([5,4]);
+    pCtx.strokeStyle='#e94560';pCtx.lineWidth=1.5;
+    pCtx.strokeRect(piece.floatX,piece.floatY,piece.w,piece.h);
+    pCtx.setLineDash([]);
+    pCtx.restore();
+  }
 }
 
 // ── PIECE DRAG ──
@@ -2843,9 +3318,11 @@ function onPieceUp(e){
 
 function stampPiece(){
   if(!piece)return;
-  const src=document.createElement('canvas');
-  src.width=piece.w; src.height=piece.h;
-  src.getContext('2d').putImageData(piece.imageData,0,0);
+  const src=piece.sourceCanvas || document.createElement('canvas');
+  if(!piece.sourceCanvas){
+    src.width=piece.w; src.height=piece.h;
+    src.getContext('2d').putImageData(piece.imageData,0,0);
+  }
 
   const cx=piece.floatX+piece.w/2;
   const cy=piece.floatY+piece.h/2;
@@ -2865,6 +3342,9 @@ function stampPiece(){
   pCtx.clearRect(0,0,PC.width,PC.height);
   PC.style.display='none';
   PC.style.pointerEvents='none';
+  PC.style.zIndex='10';  // החזר z-index רגיל
+  // החזר pointer events ל-cutCanvas אם במצב cut
+  if(mode==='cut'&&cutC2) cutC2.style.pointerEvents='auto';
   hidePieceEditUI();
   document.getElementById('angleBadge').style.display='none';
   showToast('📌 הודבק');
@@ -3117,12 +3597,29 @@ function loadImageFile(input,replace){
   const img=new Image();
   img.onload=()=>{
     saveHistory();
+    // בטל piece מהחותך (fromCutter) — אל תביא אותו לציור החדש
+    if(piece && piece.fromCutter){ piece=null; pCtx.clearRect(0,0,PC.width,PC.height); PC.style.display='none'; PC.style.pointerEvents='none'; PC.style.zIndex='10'; hidePieceEditUI(); }
+    // שמור cutOutCanvas אם המשתמש באמצע הדבקה
+    const _savedCutOut = cutPasteMode ? cutOutCanvas : null;
+    cutReset();
     const scale=Math.min(MC.width/img.width,MC.height/img.height);
     const dw=img.width*scale,dh=img.height*scale;
     ctx.fillStyle='#fff';ctx.fillRect(0,0,MC.width,MC.height);
     ctx.drawImage(img,(MC.width-dw)/2,(MC.height-dh)/2,dw,dh);
     showToast('📂 נטענה!');
     URL.revokeObjectURL(url);
+    // שחזר מצב הדבקה אחרי טעינה
+    if(_savedCutOut){
+      setTimeout(()=>{
+        setMode('cut');
+        cutOutCanvas=_savedCutOut;
+        cutPasteMode=true;
+        if(cutC2) cutC2.style.cursor='copy';
+        cutStatus('🖱️ לחץ על הציור כדי להדביק שם...');
+        const pb=document.getElementById('cutPasteBtn');
+        if(pb){pb.disabled=false;pb.style.background='#0a5a0a';pb.style.borderColor='#88ff88';}
+      },50);
+    }
   };
   img.src=url;input.value='';
 }
@@ -4087,18 +4584,39 @@ function buildHelp(){
     ['💉','טפטפת','בחר שטח → לחץ טפטפת → ממוצע משוקלל.'],
   ])+
   sec('🔧 כלים כלליים',[
-    ['↔️↕️','מראה X/Y','שיקוף בזמן אמת.'],
+    ['↔️↕️','מראה X/Y','שיקוף בזמן אמת בכל כלי ציור — X אופקי, Y אנכי, ניתן לשלב שניהם.'],
     ['↩️↪️','בטל / שחזר','ביטול או שחזור פעולה.'],
-    ['🖼️','הדבק','חתיכה מרחפת → קבע. אחרת → קליפבורד.'],
-    ['💾','שמור','PNG. ברירת מחדל: "ציור תאריך שעה".'],
-    ['📁','תיקייה','בחר תיקיית שמירה קבועה.'],
+    ['🖼️','הדבק','חתיכה מרחפת → קבע. אחרת → מנסה להדביק מהקליפבורד.'],
+    ['📂','פתח','טוען תמונה לקנבס (מחליף את הציור הנוכחי).'],
+    ['💾','שמור','שמירה כ-PNG. ברירת מחדל: "ציור תאריך שעה". שמירה אוטומטית ברקע ל-IndexedDB (משוחזר בפתיחה מחדש).'],
+    ['📁','תיקייה','בחר תיקיית שמירה קבועה (נשמרת בין סשנים).'],
     ['🗑️','נקה','מחיקת כל הציור עם אישור.'],
     ['↕️','סדר','לחיצה קצרה: בחר→לחץ יעד להזזת כפתורים. לחיצה ארוכה: פאנל עם ↑↓, 📤 יצוא הגדרות, 📥 יבוא הגדרות, ↺ איפוס.'],
     ['❓','עזרה','מסך זה — בסוף הסרגל התחתון.'],
   ])+
+  sec('✂️ חותך אזורים',[
+    ['✂️','כניסה למצב','לחץ על כפתור ✂️ חותך בסרגל התחתון.'],
+    ['👆','בחירת אזור','לחץ על שטח סגור בציור — flood-fill בוחר אותו (מסומן בגבול כתום).'],
+    ['⚙️','הגדרות','לחץ ⚙️ להרחבת אפשרויות: רגישות, חורים, מסגרת, קו מתאר, רקע שקוף/לבן.'],
+    ['📋','העתק ללוח','מעתיק את האזור הנבחר ללוח המערכת (PNG עם שקיפות).'],
+    ['🖼️','הדבק לפי נגיעה','לחץ → לחץ על הציור → האזור מופיע כחתיכה מרחפת מרוכזת על נקודת הנגיעה. גרור למיקום הרצוי → 📌 קבע.'],
+    ['🖼️→📂','הדבק בציור חדש','לחץ "הדבק לפי נגיעה" → פתח ציור חדש (📂) → הכפתור נשאר פעיל → לחץ על הציור החדש להדבקה.'],
+    ['✖','נקה','מנקה את הבחירה הנוכחית.'],
+  ])+
+  sec('🔍 זום ומעבר',[
+    ['✌️','זום','שתי אצבעות — pinch לזום. לא פעיל בסרגל/מחוגה.'],
+    ['👆👆','Double-tap','הקש פעמיים מהיר לאיפוס הזום (חזרה ל-100%).'],
+    ['👆 (zoom)','הזזה','במצב זום: גרור אצבע אחת להזזת הקנבס.'],
+    ['✅','אישור זום','הזום מוחל לקנבס לאחר עריכה — הקנבס מתעדכן בגודל הנכון.'],
+  ])+
+  sec('💉 טפטפת',[
+    ['💉','בחירת צבע','כלי עצמאי בסרגל — לחץ פעם אחת על הקנבס לדגימת הצבע שם.'],
+    ['💉','מבחירה','לאחר בחירת שטח (מלבן/לאסו) — לחץ טפטפת לממוצע משוקלל של כל הצבעים בשטח.'],
+  ])+
   sec('👌 מחוות מגע',[
     ['👆','אצבע אחת','ציור / גרירה / בחירה.'],
     ['✌️','שתי אצבעות','Zoom אמיתי. לא פעיל בסרגל/מחוגה.'],
+    ['👆👆','Double-tap','איפוס זום לגודל מקורי.'],
     ['📏🔵✌️','סרגל/מחוגה','סיבוב. לחלופין ± בסרגל העליון.'],
   ]);
 }
