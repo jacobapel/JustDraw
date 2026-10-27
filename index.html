@@ -425,15 +425,12 @@ body{ position:fixed; overflow:hidden; }
       <button onclick="cutToggleExpand()" id="cutExpandBtn"
         style="background:none;border:none;color:#f0c060;font-size:15px;cursor:pointer;padding:0;line-height:1;">⚙️</button>
       <span style="font-size:13px;color:#f0c060;font-weight:600;">✂️ חותך</span>
-      <button id="cutCopyBtn" disabled onclick="cutCopyResult()"
-        style="padding:5px 11px;border-radius:10px;background:#3a2a00;border:1.5px solid #e9a020;color:#f0c060;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;"
-        title="מעתיק PNG ללוח — אפשר להדביק בציור אחר">📋 העתק ללוח</button>
       <button id="cutPasteBtn" disabled onclick="cutStartPasteMode()"
         style="padding:5px 11px;border-radius:10px;background:#1a3a1a;border:1.5px solid #44bb44;color:#88ff88;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;"
-        title="לחץ, ואז לחץ על הציור כדי להדביק שם">🖼️ הדבק לפי נגיעה</button>
+        title="לחץ, ואז לחץ על הציור כדי להדביק שם">🖼️ הדבק בנגיעה</button>
+      <span id="cutStatus" style="font-size:12px;color:#aaa;flex:1;"></span>
       <button onclick="cutClear()"
         style="padding:5px 11px;border-radius:10px;background:#2a1a1a;border:1.5px solid #664444;color:#ff6b6b;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">✖ נקה</button>
-      <span id="cutStatus" style="font-size:12px;color:#aaa;"></span>
     </div>
 
     <!-- קטע מורחב — נפתח בלחיצת ⚙️ -->
@@ -443,10 +440,10 @@ body{ position:fixed; overflow:hidden; }
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span style="font-size:11px;color:var(--muted);min-width:44px;">בחירה:</span>
         <div style="display:flex;border:1px solid #3a3a5a;border-radius:8px;overflow:hidden;font-size:12px;">
-          <label style="cursor:pointer;"><input type="radio" name="cutMode" id="cutModeNew" value="new" checked style="display:none;">
-            <span id="cutModeNewLbl" style="display:block;padding:4px 10px;background:#1a3560;color:#aaccff;">חדשה</span></label>
-          <label style="cursor:pointer;"><input type="radio" name="cutMode" id="cutModeAdd" value="add" style="display:none;">
-            <span id="cutModeAddLbl" style="display:block;padding:4px 10px;background:transparent;color:var(--muted);">+ הוסף שטח</span></label>
+          <label style="cursor:pointer;"><input type="radio" name="cutMode" id="cutModeNew" value="new" style="display:none;">
+            <span id="cutModeNewLbl" style="display:block;padding:4px 10px;background:transparent;color:var(--muted);">חדשה</span></label>
+          <label style="cursor:pointer;"><input type="radio" name="cutMode" id="cutModeAdd" value="add" checked style="display:none;">
+            <span id="cutModeAddLbl" style="display:block;padding:4px 10px;background:#1a3560;color:#aaccff;">+ הוסף שטח</span></label>
         </div>
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;">
           <input type="checkbox" id="cutHoles" checked style="accent-color:#e9a020;"> כלול פנים
@@ -474,9 +471,9 @@ body{ position:fixed; overflow:hidden; }
           <span id="cutBorderVal" style="min-width:22px;">1px</span>
         </label>
         <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer;">
-          <input type="checkbox" id="cutOutline" checked style="accent-color:#e9a020;"> קו צבעוני
+          <input type="checkbox" id="cutOutline" style="accent-color:#e9a020;"> קו צבעוני
         </label>
-        <div id="cutOutlineOpts" style="display:flex;align-items:center;gap:6px;">
+        <div id="cutOutlineOpts" style="display:none;align-items:center;gap:6px;">
           <div id="cutSwatches" style="display:flex;gap:4px;"></div>
           <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted);">
             עובי: <input type="range" id="cutThick" min="1" max="16" value="4" style="width:55px;accent-color:#e9a020;">
@@ -661,7 +658,13 @@ body{ position:fixed; overflow:hidden; }
   <button class="tool-btn" onclick="undoAction()"><span class="icon">↩️</span><span class="lbl">בטל</span></button>
   <button class="tool-btn" onclick="redoAction()"><span class="icon">↪️</span><span class="lbl">שחזר</span></button>
   <div class="vdiv"></div>
-  <button class="tool-btn" onclick="document.getElementById('uploadFileInput').click()"><span class="icon">📂</span><span class="lbl">פתח</span></button>
+  <div style="position:relative;display:inline-flex;">
+    <button class="tool-btn" id="btnOpen" onclick="toggleOpenMenu(event)"><span class="icon">📂</span><span class="lbl">פתח</span></button>
+    <div id="openMenu" style="display:none;position:fixed;background:#1a2240;border:1px solid #3a4a70;border-radius:8px;box-shadow:0 4px 16px #0008;z-index:9999;min-width:120px;overflow:hidden;">
+      <button onclick="closeOpenMenu();document.getElementById('uploadFileInput').click();" style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;background:none;border:none;color:#dde;font-size:13px;cursor:pointer;white-space:nowrap;" onmouseover="this.style.background='#2a3a60'" onmouseout="this.style.background='none'"><span>🖼️</span>תמונה</button>
+      <button onclick="closeOpenMenu();openNewCanvas();" style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;background:none;border:none;color:#dde;font-size:13px;cursor:pointer;white-space:nowrap;" onmouseover="this.style.background='#2a3a60'" onmouseout="this.style.background='none'"><span>🗋</span>דף ריק</button>
+    </div>
+  </div>
   <button class="tool-btn" onclick="pasteFromClipboard()"><span class="icon">🖼️</span><span class="lbl">הדבק</span></button>
   <button class="tool-btn" onclick="copyCanvas()"><span class="icon">📋</span><span class="lbl">העתק</span></button>
   <button class="tool-btn" onclick="downloadCanvas()"><span class="icon">💾</span><span class="lbl">שמור</span></button>
@@ -1381,7 +1384,7 @@ let cutSel=null, cutSelBB=null, cutSeeds=[], cutOutCanvas=null;
 let cutLastX=0, cutLastY=0;
 
 const CUT_COLORS=['#E2581A','#D62828','#1D4ED8','#0E9F6E','#7C3AED','#F5C518','#111111','#FFFFFF'];
-let cutOpts={tol:30,mode:'new',holes:true,frame:'with',border:1,outline:true,color:CUT_COLORS[0],thick:4,bg:'transparent',auto:true,pasteAtTouch:true};
+let cutOpts={tol:30,mode:'add',holes:true,frame:'with',border:1,outline:false,color:CUT_COLORS[0],thick:4,bg:'transparent',auto:true,pasteAtTouch:true};
 
 // build colour swatches
 (function(){
@@ -3737,6 +3740,30 @@ async function downloadCanvas(){
 }
 
 // ── CLEAR ──
+function toggleOpenMenu(e){
+  e.stopPropagation();
+  const m=document.getElementById('openMenu');
+  const open=m.style.display==='block';
+  if(open){ m.style.display='none'; return; }
+  const r=e.currentTarget.getBoundingClientRect();
+  m.style.display='block';
+  m.style.left=Math.max(0,r.right-m.offsetWidth)+'px';
+  m.style.top=(r.top-m.offsetHeight-6)+'px';
+  // fallback: if too high, show below
+  if(r.top-m.offsetHeight-6 < 4){
+    m.style.top=(r.bottom+6)+'px';
+  }
+  setTimeout(()=>document.addEventListener('click',closeOpenMenu,{once:true}),0);
+}
+function closeOpenMenu(){
+  const m=document.getElementById('openMenu');
+  if(m) m.style.display='none';
+}
+function openNewCanvas(){
+  saveHistory();
+  _doClearAll();
+  showToast('🗋 דף ריק');
+}
 function clearAll(){
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:center;justify-content:center;';
@@ -4587,7 +4614,7 @@ function buildHelp(){
     ['↔️↕️','מראה X/Y','שיקוף בזמן אמת בכל כלי ציור — X אופקי, Y אנכי, ניתן לשלב שניהם.'],
     ['↩️↪️','בטל / שחזר','ביטול או שחזור פעולה.'],
     ['🖼️','הדבק','חתיכה מרחפת → קבע. אחרת → מנסה להדביק מהקליפבורד.'],
-    ['📂','פתח','טוען תמונה לקנבס (מחליף את הציור הנוכחי).'],
+    ['📂','פתח','פותח תפריט: 🖼️ תמונה — טוען קובץ תמונה לקנבס; 🗋 דף ריק — מנקה לקנבס לבן חדש.'],
     ['💾','שמור','שמירה כ-PNG. ברירת מחדל: "ציור תאריך שעה". שמירה אוטומטית ברקע ל-IndexedDB (משוחזר בפתיחה מחדש).'],
     ['📁','תיקייה','בחר תיקיית שמירה קבועה (נשמרת בין סשנים).'],
     ['🗑️','נקה','מחיקת כל הציור עם אישור.'],
@@ -4598,9 +4625,8 @@ function buildHelp(){
     ['✂️','כניסה למצב','לחץ על כפתור ✂️ חותך בסרגל התחתון.'],
     ['👆','בחירת אזור','לחץ על שטח סגור בציור — flood-fill בוחר אותו (מסומן בגבול כתום).'],
     ['⚙️','הגדרות','לחץ ⚙️ להרחבת אפשרויות: רגישות, חורים, מסגרת, קו מתאר, רקע שקוף/לבן.'],
-    ['📋','העתק ללוח','מעתיק את האזור הנבחר ללוח המערכת (PNG עם שקיפות).'],
-    ['🖼️','הדבק לפי נגיעה','לחץ → לחץ על הציור → האזור מופיע כחתיכה מרחפת מרוכזת על נקודת הנגיעה. גרור למיקום הרצוי → 📌 קבע.'],
-    ['🖼️→📂','הדבק בציור חדש','לחץ "הדבק לפי נגיעה" → פתח ציור חדש (📂) → הכפתור נשאר פעיל → לחץ על הציור החדש להדבקה.'],
+    ['🖼️','הדבק בנגיעה','לחץ → לחץ על הציור → האזור מופיע כחתיכה מרחפת מרוכזת על נקודת הנגיעה. גרור למיקום הרצוי → 📌 קבע.'],
+    ['🖼️→📂','הדבק בציור חדש','לחץ "הדבק בנגיעה" → פתח ציור חדש (📂 ← דף ריק) → הכפתור נשאר פעיל → לחץ על הציור החדש להדבקה. הערה: בדף הריק עשוי להופיע גבול כתום — הוא נעלם ברגע שמתחילים לצייר או בוחרים כלי.'],
     ['✖','נקה','מנקה את הבחירה הנוכחית.'],
   ])+
   sec('🔍 זום ומעבר',[
