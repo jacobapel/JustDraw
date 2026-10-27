@@ -1761,7 +1761,7 @@ function showPieceEditUI(){
   document.getElementById('pieceUIToggle').style.justifyContent='center';
   pieceUIHidden=false;
   if(activePieceControl) openPieceControl(activePieceControl);
-  else openPieceControl('w');
+  else openPieceControl('r');
 }
 function hidePieceEditUI(){
   pieceRail.classList.remove('open');
@@ -1802,13 +1802,14 @@ function openPieceControl(key){
   if(railBtn) railBtn.classList.add('active');
 
   let html='';
+  const backToR=`onchange="if(activePieceControl!=='r') openPieceControl('r')"`;
   if(key==='w'){
     html=`<span class="slider-label">↔</span>
-      <input type="range" id="pieceW" min="10" max="2000" value="${Math.round(piece.w)}" oninput="resizePiece('w',+this.value)">
+      <input type="range" id="pieceW" min="10" max="2000" value="${Math.round(piece.w)}" oninput="resizePiece('w',+this.value)" ${backToR}>
       <span class="slider-label" id="pieceWVal">${Math.round(piece.w)}</span>`;
   } else if(key==='h'){
     html=`<span class="slider-label">↕</span>
-      <input type="range" id="pieceH" min="10" max="2000" value="${Math.round(piece.h)}" oninput="resizePiece('h',+this.value)">
+      <input type="range" id="pieceH" min="10" max="2000" value="${Math.round(piece.h)}" oninput="resizePiece('h',+this.value)" ${backToR}>
       <span class="slider-label" id="pieceHVal">${Math.round(piece.h)}</span>`;
   } else if(key==='r'){
     html=`<span class="slider-label">↻</span>
@@ -1816,11 +1817,11 @@ function openPieceControl(key){
       <span class="slider-label" id="pieceRVal">${Math.round(piece.angle||0)}°</span>`;
   } else if(key==='fliph'){
     html=`<span class="slider-label">⇄</span>
-      <input type="range" id="pieceFlipH" min="0" max="100" value="${Math.round(piece.flipHProg||0)}" oninput="setFlipProgress('h',+this.value)">
+      <input type="range" id="pieceFlipH" min="0" max="100" value="${Math.round(piece.flipHProg||0)}" oninput="setFlipProgress('h',+this.value)" ${backToR}>
       <span class="slider-label" id="pieceFlipHVal">${Math.round(piece.flipHProg||0)}%</span>`;
   } else if(key==='flipv'){
     html=`<span class="slider-label">⇵</span>
-      <input type="range" id="pieceFlipV" min="0" max="100" value="${Math.round(piece.flipVProg||0)}" oninput="setFlipProgress('v',+this.value)">
+      <input type="range" id="pieceFlipV" min="0" max="100" value="${Math.round(piece.flipVProg||0)}" oninput="setFlipProgress('v',+this.value)" ${backToR}>
       <span class="slider-label" id="pieceFlipVVal">${Math.round(piece.flipVProg||0)}%</span>`;
   } else if(key==='blend'){
     const bm=piece.blendMode||'source-over';
@@ -1830,14 +1831,14 @@ function openPieceControl(key){
   } else if(key==='opac'){
     const op=Math.round((piece.opacity||1)*100);
     html=`<span class="slider-label">⬜</span>
-      <input type="range" id="pieceOpacity" min="10" max="100" value="${op}" oninput="setPieceOpacity(+this.value)">
+      <input type="range" id="pieceOpacity" min="10" max="100" value="${op}" oninput="setPieceOpacity(+this.value)" ${backToR}>
       <span class="slider-label" id="pieceOpacityVal">${op}%</span>`;
   } else if(key==='scale'){
     const origW=piece.w, origH=piece.h;
     piece._scaleOrigW=piece._scaleOrigW||origW;
     piece._scaleOrigH=piece._scaleOrigH||origH;
     html=`<span class="slider-label">⤢</span>
-      <input type="range" id="pieceScale" min="10" max="300" value="100" oninput="scalePiece(+this.value)">
+      <input type="range" id="pieceScale" min="10" max="300" value="100" oninput="scalePiece(+this.value)" ${backToR}>
       <span class="slider-label" id="pieceScaleVal">100%</span>`;
   } else if(key==='xray'){
     html=`<button id="btnXray" class="blend-btn${piece.xray?' active':''}" onclick="toggleXray()" style="flex:1">
