@@ -76,7 +76,7 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;
 #shapePickerBtn{position:relative;}
 #shapePicker{
   display:none;position:fixed;z-index:60;
-  bottom:var(--bar-h);left:0;right:0;
+  bottom:calc(var(--bar-h) + var(--safe-bottom,0px));left:0;right:0;
   background:var(--panel);border-top:1.5px solid #2a2a4a;
   border-radius:16px 16px 0 0;
   box-shadow:0 -4px 28px rgba(0,0,0,.6);
@@ -121,7 +121,7 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;
 .fill-tog.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 #selBar{
   display:none;position:fixed;z-index:50;
-  bottom:var(--bar-h);left:0;right:0;
+  bottom:calc(var(--bar-h) + var(--safe-bottom,0px));left:0;right:0;
   background:var(--panel);border-top:2px solid var(--accent);
   border-radius:16px 16px 0 0;
   flex-direction:column;
@@ -129,7 +129,7 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;
   max-height:80vh;
   transition:bottom .2s ease;
 }
-#selBar.minimized{ bottom:calc(var(--bar-h) - 100% + 48px); }
+#selBar.minimized{ bottom:calc(var(--bar-h) + var(--safe-bottom,0px) - 100% + 48px); }
 #selBar .panel-handle,#pieceBar .panel-handle{
   display:flex;align-items:center;justify-content:space-between;
   padding:12px 14px 10px;cursor:pointer;position:relative;
@@ -193,7 +193,7 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;
 /* ── PIECE EDIT: ONE-ROW BOTTOM CONTROL ── */
 #pieceControlRow{
   display:none;position:fixed;z-index:55;
-  bottom:var(--bar-h);left:6px;right:6px;
+  bottom:calc(var(--bar-h) + var(--safe-bottom,0px));left:6px;right:6px;
   background:var(--panel);border:1.5px solid #4caf50;
   border-radius:14px;padding:10px 14px;
   align-items:center;gap:8px;
@@ -215,7 +215,7 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;
 /* ── PIECE EDIT: PERSISTENT CONFIRM ROW ── */
 #pieceConfirmRow{
   position:fixed;z-index:56;
-  bottom:calc(var(--bar-h) + 64px);left:50%;transform:translateX(-50%);
+  bottom:calc(var(--bar-h) + var(--safe-bottom,0px) + 64px);left:50%;transform:translateX(-50%);
   background:var(--panel);border:1.5px solid #4caf50;border-radius:30px;
   padding:6px 10px;gap:6px;display:none;align-items:center;
   box-shadow:0 4px 14px rgba(0,0,0,.5);
@@ -230,7 +230,7 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;
 
 #pieceBar{
   display:none;position:fixed;z-index:50;
-  bottom:var(--bar-h);left:0;right:0;
+  bottom:calc(var(--bar-h) + var(--safe-bottom,0px));left:0;right:0;
   background:var(--panel);border-top:2px solid #4caf50;
   border-radius:16px 16px 0 0;
   flex-direction:column;
@@ -238,7 +238,7 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;
   max-height:80vh;
   transition:bottom .2s ease;
 }
-#pieceBar.minimized{ bottom:calc(var(--bar-h) - 100% + 48px); }
+#pieceBar.minimized{ bottom:calc(var(--bar-h) + var(--safe-bottom,0px) - 100% + 48px); }
 #pieceBar input[type=range]::-webkit-slider-thumb{
   -webkit-appearance:none;width:22px;height:22px;border-radius:50%;
   background:var(--text);border:2.5px solid #4caf50;
@@ -402,19 +402,18 @@ body{ position:fixed; overflow:hidden; }
   <canvas id="cutCanvas"    style="position:absolute;top:0;left:0;z-index:16;display:none;touch-action:none;cursor:crosshair;"></canvas>
 
   <!-- compass controls (bottom sheet style) -->
-  <div id="compassCtrl" style="display:none;position:fixed;bottom:var(--bar-h);left:0;right:0;
+  <div id="compassCtrl" style="display:none;position:fixed;bottom:calc(var(--bar-h) + var(--safe-bottom,0px));left:0;right:0;
     z-index:50;background:var(--panel);border-top:2px solid #4488cc;
     border-radius:16px 16px 0 0;padding:10px 14px;
     display:none;align-items:center;gap:8px;flex-wrap:wrap;
     box-shadow:0 -4px 20px rgba(0,0,0,.5);">
     <button id="btnPin"   onclick="compassPin()"   style="padding:7px 14px;border-radius:10px;background:#1a3a6a;border:1.5px solid #4488cc;color:#88ccff;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;">📍 הצמד חוד</button>
     <button id="btnCDraw" onclick="compassDraw()"  style="padding:7px 14px;border-radius:10px;background:#0f3460;border:1.5px solid #2a2a4a;color:var(--muted);font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;" disabled>✏️ התחל ציור</button>
-    <button id="btnCStop" onclick="compassStop()"  style="padding:7px 14px;border-radius:10px;background:#2a1a1a;border:1.5px solid #664444;color:#ff6b6b;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;" disabled>🔓 שחרר חוד</button>
     <span id="compassInfo" style="font-size:12px;color:var(--muted);margin-right:auto;"></span>
   </div>
 
   <!-- cut/region controls -->
-  <div id="cutCtrl" style="display:none;position:fixed;bottom:var(--bar-h);left:0;right:0;
+  <div id="cutCtrl" style="display:none;position:fixed;bottom:calc(var(--bar-h) + var(--safe-bottom,0px));left:0;right:0;
     z-index:50;background:var(--panel);border-top:2px solid #e9a020;
     border-radius:16px 16px 0 0;padding:6px 14px 8px;
     flex-direction:column;gap:6px;
@@ -690,7 +689,7 @@ body{ position:fixed; overflow:hidden; }
 </div>
 
 <!-- COLOR MIX PANEL -->
-<div id="colorMixPanel" style="display:none;position:fixed;z-index:60;bottom:var(--bar-h);left:0;right:0;
+<div id="colorMixPanel" style="display:none;position:fixed;z-index:60;bottom:calc(var(--bar-h) + var(--safe-bottom,0px));left:0;right:0;
   background:var(--panel);border-top:2px solid #e94560;border-radius:16px 16px 0 0;
   padding:14px 16px 18px;font-family:Heebo,sans-serif;direction:rtl;
   box-shadow:0 -4px 20px rgba(0,0,0,.5);">
@@ -1345,11 +1344,18 @@ function onCompassUp(e){
 }
 
 // ── Compass control buttons ──
+function setPinBtn(pinned){
+  const b=document.getElementById('btnPin');
+  b.textContent=pinned?'🔓 שחרר חוד':'📍 הצמד חוד';
+  b.style.background=pinned?'#2a1a1a':'#1a3a6a';
+  b.style.borderColor=pinned?'#664444':'#4488cc';
+  b.style.color=pinned?'#ff6b6b':'#88ccff';
+}
 function compassPin(){
+  if(C.state==='pinned'){compassStop();return;}
   const{needle}=compassTips();C.pin={x:needle.x,y:needle.y};C.state='pinned';
-  document.getElementById('btnPin').disabled=true;
+  setPinBtn(true);
   document.getElementById('btnCDraw').disabled=false;
-  document.getElementById('btnCStop').disabled=false;
   showToast('📍 חוד הוצמד — קבע רדיוס ולחץ "התחל ציור"');
   drawCompassOverlay();
 }
@@ -1368,10 +1374,10 @@ function compassDraw(){
   drawCompassOverlay();
 }
 function compassStop(){
+  if(C.drawing){saveHistory();drawGuideLines();}
   C.state='free';C.pin=null;C.drawing=false;C.arcR=undefined;
-  document.getElementById('btnPin').disabled=false;
+  setPinBtn(false);
   document.getElementById('btnCDraw').disabled=true;document.getElementById('btnCDraw').textContent='✏️ התחל ציור';
-  document.getElementById('btnCStop').disabled=true;
   showToast('🔓 חוד שוחרר');drawCompassOverlay();
 }
 // ══════════════════════════════════════
