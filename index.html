@@ -174,17 +174,19 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;
 /* ── PIECE EDIT: SIDE ICON RAIL ── */
 #pieceRail{
   display:none;position:fixed;z-index:55;
-  top:50%;left:6px;transform:translateY(-50%);
-  flex-direction:column;gap:6px;
+  top:calc(var(--top-h) + 44px);left:6px;
+  flex-direction:column;gap:4px;
   background:var(--panel);border:1.5px solid #4caf50;
-  border-radius:14px;padding:6px;
+  border-radius:12px;padding:4px;
+  max-height:calc(100dvh - var(--top-h) - var(--bar-h) - 126px);overflow-y:auto;scrollbar-width:none;touch-action:pan-y;
   box-shadow:0 4px 16px rgba(0,0,0,.5);
 }
 #pieceRail.open{display:flex;}
+#pieceRail::-webkit-scrollbar{display:none;}
 #pieceRail button{
-  width:38px;height:38px;border-radius:10px;
+  width:var(--rail-btn,32px);height:var(--rail-btn,32px);border-radius:8px;flex-shrink:0;padding:0;
   background:#0f3460;border:1px solid #2a2a4a;color:var(--text);
-  font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:calc(var(--rail-btn,32px) * .47);cursor:pointer;display:flex;align-items:center;justify-content:center;
   transition:background .15s;
 }
 #pieceRail button.active{background:#4caf50;color:#fff;}
@@ -596,6 +598,7 @@ body{ position:fixed; overflow:hidden; }
   <button id="railBlend"  onclick="openPieceControl('blend')"  title="מיזוג">⚡</button>
   <button id="railOpac"   onclick="openPieceControl('opac')"   title="שקיפות">⬜</button>
   <button id="railXray"   onclick="openPieceControl('xray')"   title="X-Ray">🔍</button>
+  <button id="railWarp"   onclick="openPieceControl('warp')"   title="עיוות">〰</button>
 </div>
 
 <!-- piece edit: dynamic single-row control (changes content per rail icon) -->
@@ -1798,10 +1801,12 @@ function togglePieceUI(){
   }
 }
 
-const RAIL_IDS={scale:'railScale',w:'railW',h:'railH',r:'railR',fliph:'railFlipH',flipv:'railFlipV',blend:'railBlend',opac:'railOpac',xray:'railXray'};
+const RAIL_IDS={scale:'railScale',w:'railW',h:'railH',r:'railR',fliph:'railFlipH',flipv:'railFlipV',blend:'railBlend',opac:'railOpac',xray:'railXray',warp:'railWarp'};
 
 function openPieceControl(key){
   if(!piece) return;
+  if(key!=='warp'&&piece.warp) commitWarp();
+  if(key==='warp'&&!enterWarp()) return;
   activePieceControl=key;
   document.querySelectorAll('#pieceRail button').forEach(b=>b.classList.remove('active'));
   const railBtn=document.getElementById(RAIL_IDS[key]);
@@ -1846,6 +1851,8 @@ function openPieceControl(key){
     html=`<span class="slider-label">⤢</span>
       <input type="range" id="pieceScale" min="10" max="300" value="100" oninput="scalePiece(+this.value)" ${backToR}>
       <span class="slider-label" id="pieceScaleVal">100%</span>`;
+  } else if(key==='warp'){
+    html=warpControlHTML();
   } else if(key==='xray'){
     html=`<button id="btnXray" class="blend-btn${piece.xray?' active':''}" onclick="toggleXray()" style="flex:1">
         <span class="icon">🔍</span>X-Ray מיקום
@@ -2100,6 +2107,14 @@ function layout(){
   const pt=document.getElementById('pieceUIToggle');
   if(ab) ab.style.top=(topH+2)+'px';
   if(pt) pt.style.top=(topH+2)+'px';
+  // piece rail: from below the badges down to above the control row; shrink buttons so all fit
+  const pr=document.getElementById('pieceRail');
+  if(pr){
+    const avail=window.innerHeight-topH-44-botH-82;
+    pr.style.top=(topH+44)+'px';pr.style.maxHeight=Math.max(120,avail)+'px';
+    const n=pr.querySelectorAll('button').length||1;
+    pr.style.setProperty('--rail-btn',Math.max(24,Math.min(32,Math.floor((avail-10-(n-1)*4)/n)))+'px');
+  }
   const W=wrap.clientWidth, H=wrap.clientHeight;
   let saved=null;
   if(MC.width>0&&MC.height>0) try{saved=ctx.getImageData(0,0,MC.width,MC.height);}catch(e){}
@@ -2187,6 +2202,7 @@ function saveHistory(){
   autosave();
 }
 function undoAction(){
+  if(piece&&piece.warp&&piece.warp.undo.length){warpUndo();return;}
   if(!undoStack.length){showToast('אין מה לבטל');return;}
   try{redoStack.push(ctx.getImageData(0,0,MC.width,MC.height));ctx.putImageData(undoStack.pop(),0,0);}catch(e){}
   showToast('↩ בוטל');
@@ -3225,6 +3241,7 @@ function flipScale(progress){
 function redrawPiece(){
   if(!piece)return;
   pCtx.clearRect(0,0,PC.width,PC.height);
+  if(piece.warp){drawWarpPiece();return;}
 
   const cx=piece.floatX+piece.w/2;
   const cy=piece.floatY+piece.h/2;
@@ -3290,27 +3307,488 @@ function redrawPiece(){
   }
 }
 
+
+// ══════════════════════════════════════
+//  〰 WARP — עיוות חתיכה (מנוע MVC + שילוב בעריכת חתיכה)
+// ══════════════════════════════════════
+const Warp=(()=>{
+  const dist=(a,b)=>Math.hypot(b.x-a.x,b.y-a.y);
+  const lerp=(a,b,u)=>({x:a.x+(b.x-a.x)*u,y:a.y+(b.y-a.y)*u});
+  const qb=(a,c,b,u)=>{const v=1-u;return{x:v*v*a.x+2*u*v*c.x+u*u*b.x,y:v*v*a.y+2*u*v*c.y+u*u*b.y};};
+
+  function toCanvas(src){
+    if(src instanceof HTMLCanvasElement) return src;
+    const c=document.createElement('canvas');c.width=src.width;c.height=src.height;
+    c.getContext('2d').putImageData(src,0,0);return c;
+  }
+
+  // ── outline extraction ──
+  function largestComponent(m,W,H){
+    const N=W*H,lab=new Int32Array(N),st=new Int32Array(N);let cur=0,best=-1,bestN=0;
+    for(let s=0;s<N;s++){
+      if(!m[s]||lab[s])continue;
+      cur++;let sp=0,cnt=0;st[sp++]=s;lab[s]=cur;
+      while(sp){
+        const i=st[--sp];cnt++;const x=i%W,y=(i/W)|0;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+          if(!dx&&!dy)continue;const nx=x+dx,ny=y+dy;
+          if(nx<0||ny<0||nx>=W||ny>=H)continue;const q=ny*W+nx;
+          if(m[q]&&!lab[q]){lab[q]=cur;st[sp++]=q;}
+        }
+      }
+      if(cnt>bestN){bestN=cnt;best=cur;}
+    }
+    if(best<0)return null;
+    const out=new Uint8Array(N);for(let i=0;i<N;i++)if(lab[i]===best)out[i]=1;
+    return out;
+  }
+  const DX=[-1,-1,0,1,1,1,0,-1],DY=[0,-1,-1,-1,0,1,1,1];
+  function dirOf(dx,dy){for(let i=0;i<8;i++)if(DX[i]===dx&&DY[i]===dy)return i;return 0;}
+  function traceBoundary(m,W,H){
+    let s=-1;for(let i=0;i<W*H;i++)if(m[i]){s=i;break;}
+    if(s<0)return[];
+    const sx=s%W,sy=(s/W)|0;
+    const inside=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&m[y*W+x]===1;
+    const step=c=>{
+      for(let k=1;k<=8;k++){
+        const d=(c.b+k)%8,nx=c.x+DX[d],ny=c.y+DY[d];
+        if(inside(nx,ny)){const pd=(c.b+k-1)%8;return{x:nx,y:ny,b:dirOf(c.x+DX[pd]-nx,c.y+DY[pd]-ny)};}
+      }
+      return null;
+    };
+    const first=step({x:sx,y:sy,b:0});
+    if(!first)return[{x:sx,y:sy}];
+    const pts=[{x:sx,y:sy}];let c=first,guard=0;const max=W*H*2+10;
+    while(c&&guard++<max){
+      if(c.x===sx&&c.y===sy){
+        const nx=step(c);if(!nx||(nx.x===first.x&&nx.y===first.y))break;
+        pts.push({x:c.x,y:c.y});c=nx;continue;
+      }
+      pts.push({x:c.x,y:c.y});c=step(c);
+    }
+    return pts;
+  }
+  function smooth(p,iters){
+    for(let it=0;it<iters;it++){
+      const n=p.length;
+      p=p.map((q,i)=>{const a=p[(i-1+n)%n],b=p[(i+1)%n];return{x:(a.x+2*q.x+b.x)/4,y:(a.y+2*q.y+b.y)/4};});
+    }
+    return p;
+  }
+  function perimeter(p){let L=0;for(let i=0;i<p.length;i++)L+=dist(p[i],p[(i+1)%p.length]);return L;}
+  function resampleUniform(p,spacing){
+    const n=p.length,cum=[0];
+    for(let i=1;i<=n;i++)cum.push(cum[i-1]+dist(p[i-1],p[i%n]));
+    const L=cum[n],cnt=Math.max(16,Math.round(L/spacing)),out=[];let j=0;
+    for(let k=0;k<cnt;k++){
+      const t=k*L/cnt;while(j<n-1&&cum[j+1]<t)j++;
+      const seg=cum[j+1]-cum[j]||1;out.push(lerp(p[j],p[(j+1)%n],(t-cum[j])/seg));
+    }
+    return out;
+  }
+  function resampleKeepCorners(p,spacing){
+    const out=[];
+    for(let i=0;i<p.length;i++){
+      const a=p[i],b=p[(i+1)%p.length],k=Math.max(1,Math.round(dist(a,b)/spacing));
+      for(let j=0;j<k;j++)out.push(lerp(a,b,j/k));
+    }
+    return out;
+  }
+
+  // ── Mean Value Coordinates ──
+  function mvc(P,v,out,off,bx,by,br,bt){
+    const n=P.length;
+    for(let i=0;i<n;i++){
+      bx[i]=P[i].x-v.x;by[i]=P[i].y-v.y;br[i]=Math.hypot(bx[i],by[i]);
+      if(br[i]<1e-6){for(let k=0;k<n;k++)out[off+k]=0;out[off+i]=1;return;}
+    }
+    for(let i=0;i<n;i++){
+      const j=(i+1)%n,cr=bx[i]*by[j]-by[i]*bx[j],dt=bx[i]*bx[j]+by[i]*by[j];
+      if(Math.abs(cr)<=1e-7*br[i]*br[j]&&dt<0){ // point lies on edge i→j
+        for(let k=0;k<n;k++)out[off+k]=0;const lam=br[i]/(br[i]+br[j]);
+        out[off+i]=1-lam;out[off+j]=lam;return;
+      }
+      bt[i]=cr/(br[i]*br[j]+dt); // tan(half signed angle)
+    }
+    let sum=0;
+    for(let i=0;i<n;i++){const w=(bt[(i-1+n)%n]+bt[i])/br[i];out[off+i]=w;sum+=w;}
+    if(Math.abs(sum)<1e-12){ // degenerate — snap to nearest vertex
+      let bi=0;for(let i=1;i<n;i++)if(br[i]<br[bi])bi=i;
+      for(let k=0;k<n;k++)out[off+k]=0;out[off+bi]=1;return;
+    }
+    for(let i=0;i<n;i++)out[off+i]/=sum;
+  }
+
+  // ── session: source image + outline + mesh + precomputed weights ──
+  function createSession(src){
+    const canvas=toCanvas(src),W=canvas.width,H=canvas.height;
+    const data=canvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H).data;
+    const solid=new Uint8Array(W*H),any=new Uint8Array(W*H);let full=true;
+    for(let i=0;i<W*H;i++){const a=data[i*4+3];solid[i]=a>24?1:0;any[i]=a>2?1:0;if(a<250)full=false;}
+    let S;
+    if(full){
+      const L=2*(W+H);S=resampleKeepCorners([{x:0,y:0},{x:W,y:0},{x:W,y:H},{x:0,y:H}],Math.max(3,L/260));
+    } else {
+      const comp=largestComponent(solid,W,H);if(!comp)return null;
+      const raw=smooth(traceBoundary(comp,W,H).map(p=>({x:p.x+.5,y:p.y+.5})),2);
+      if(raw.length<3)return null;
+      S=resampleUniform(raw,Math.max(3,perimeter(raw)/260));
+    }
+    // mesh only over cells that hold visible pixels
+    const g=Math.max(8,Math.ceil(Math.max(W,H)/36)),cols=Math.ceil(W/g),rows=Math.ceil(H/g);
+    const vIndex=new Int32Array((cols+1)*(rows+1)).fill(-1),verts=[],tris=[];
+    const vid=(i,j)=>{const k=j*(cols+1)+i;if(vIndex[k]<0){vIndex[k]=verts.length;verts.push({x:Math.min(i*g,W),y:Math.min(j*g,H)});}return vIndex[k];};
+    for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
+      const x0=i*g,y0=j*g,x1=Math.min(W,x0+g),y1=Math.min(H,y0+g);let has=false;
+      for(let y=y0;y<y1&&!has;y++)for(let x=x0;x<x1;x++)if(any[y*W+x]){has=true;break;}
+      if(!has)continue;
+      const a=vid(i,j),b=vid(i+1,j),c=vid(i+1,j+1),d=vid(i,j+1);
+      tris.push([a,b,c],[a,c,d]);
+    }
+    const n=S.length,weights=new Float32Array(verts.length*n);
+    const bx=new Float64Array(n),by=new Float64Array(n),br=new Float64Array(n),bt=new Float64Array(n);
+    verts.forEach((v,k)=>mvc(S,v,weights,k*n,bx,by,br,bt));
+    return{canvas,W,H,S,T:S.map(p=>({x:p.x,y:p.y})),verts,tris,weights,dest:verts.map(v=>({x:v.x,y:v.y}))};
+  }
+
+  function updateDest(s){
+    const n=s.S.length,Wt=s.weights,T=s.T;
+    for(let k=0;k<s.verts.length;k++){
+      let x=0,y=0;const off=k*n;
+      for(let i=0;i<n;i++){const w=Wt[off+i];if(w!==0){x+=w*T[i].x;y+=w*T[i].y;}}
+      s.dest[k].x=x;s.dest[k].y=y;
+    }
+  }
+
+  // ── rendering: affine-mapped triangles ──
+  function drawTri(ctx,img,s0,s1,s2,d0,d1,d2,pad){
+    const u1x=s1.x-s0.x,u1y=s1.y-s0.y,u2x=s2.x-s0.x,u2y=s2.y-s0.y,D=u1x*u2y-u2x*u1y;
+    if(Math.abs(D)<1e-9)return;
+    const v1x=d1.x-d0.x,v1y=d1.y-d0.y,v2x=d2.x-d0.x,v2y=d2.y-d0.y;
+    const a=(v1x*u2y-v2x*u1y)/D,b=(v1y*u2y-v2y*u1y)/D,c=(u1x*v2x-u2x*v1x)/D,d=(u1x*v2y-u2x*v1y)/D;
+    const e=d0.x-a*s0.x-c*s0.y,f=d0.y-b*s0.x-d*s0.y;
+    const cx=(d0.x+d1.x+d2.x)/3,cy=(d0.y+d1.y+d2.y)/3;
+    const ex=p=>{const vx=p.x-cx,vy=p.y-cy,l=Math.hypot(vx,vy)||1;return{x:p.x+vx*pad/l,y:p.y+vy*pad/l};};
+    const e0=ex(d0),e1=ex(d1),e2=ex(d2);
+    const sx0=Math.max(0,Math.floor(Math.min(s0.x,s1.x,s2.x))-2),sy0=Math.max(0,Math.floor(Math.min(s0.y,s1.y,s2.y))-2);
+    const sx1=Math.min(img.width,Math.ceil(Math.max(s0.x,s1.x,s2.x))+2),sy1=Math.min(img.height,Math.ceil(Math.max(s0.y,s1.y,s2.y))+2);
+    if(sx1<=sx0||sy1<=sy0)return;
+    ctx.save();
+    ctx.beginPath();ctx.moveTo(e0.x,e0.y);ctx.lineTo(e1.x,e1.y);ctx.lineTo(e2.x,e2.y);ctx.closePath();ctx.clip();
+    ctx.transform(a,b,c,d,e,f);
+    ctx.drawImage(img,sx0,sy0,sx1-sx0,sy1-sy0,sx0,sy0,sx1-sx0,sy1-sy0);
+    ctx.restore();
+  }
+  function render(s,ctx,pad){
+    ctx.imageSmoothingEnabled=true;
+    const V=s.verts,D=s.dest,p=pad==null?.6:pad;
+    for(const[a,b,c]of s.tris)drawTri(ctx,s.canvas,V[a],V[b],V[c],D[a],D[b],D[c],p);
+  }
+  function bake(s){
+    let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    for(const p of s.dest){if(p.x<x0)x0=p.x;if(p.y<y0)y0=p.y;if(p.x>x1)x1=p.x;if(p.y>y1)y1=p.y;}
+    x0=Math.floor(x0)-1;y0=Math.floor(y0)-1;x1=Math.ceil(x1)+1;y1=Math.ceil(y1)+1;
+    const c=document.createElement('canvas');c.width=Math.max(1,x1-x0);c.height=Math.max(1,y1-y0);
+    const g=c.getContext('2d');g.translate(-x0,-y0);render(s,g,.5);
+    return{canvas:c,x:x0,y:y0}; // x,y = offset relative to the source origin
+  }
+
+  // ── outline geometry ──
+  function nearestOnOutline(T,p){
+    let best=null;const n=T.length;
+    for(let i=0;i<n;i++){
+      const a=T[i],b=T[(i+1)%n],vx=b.x-a.x,vy=b.y-a.y,l2=vx*vx+vy*vy||1;
+      const u=Math.max(0,Math.min(1,((p.x-a.x)*vx+(p.y-a.y)*vy)/l2));
+      const q={x:a.x+vx*u,y:a.y+vy*u},d=dist(p,q);
+      if(!best||d<best.dist)best={seg:i,lam:u,pt:q,dist:d};
+    }
+    return best;
+  }
+  function arcIndices(n,iA,iB,dir){const out=[iA];let i=iA,g=0;while(i!==iB&&g++<n){i=(i+dir+n)%n;out.push(i);}return out;}
+  function arcContains(n,iA,iB,dir,seg){
+    const idx=arcIndices(n,iA,iB,dir);
+    for(let k=0;k<idx.length-1;k++){if((dir===1&&idx[k]===seg)||(dir===-1&&idx[k+1]===seg))return true;}
+    return false;
+  }
+
+  // profile: 'tri' | 'convex' | 'concave'
+  function profileFn(type,A,B,P,tg){
+    if(type==='tri')return t=>t<=tg?lerp(A,P,t/tg):lerp(P,B,(t-tg)/(1-tg));
+    const abl=dist(A,B)||1,ux=(B.x-A.x)/abl,uy=(B.y-A.y)/abl;
+    if(type==='convex'){
+      const h1=.5*dist(A,P),h2=.5*dist(P,B);
+      const C1={x:P.x-ux*h1,y:P.y-uy*h1},C2={x:P.x+ux*h2,y:P.y+uy*h2};
+      return t=>t<=tg?qb(A,C1,P,t/tg):qb(P,C2,B,(t-tg)/(1-tg));
+    }
+    const foot=q=>{const s=(q.x-A.x)*ux+(q.y-A.y)*uy;return{x:A.x+ux*s,y:A.y+uy*s};};
+    const m1=lerp(A,P,.5),m2=lerp(P,B,.5),C1=lerp(m1,foot(m1),.85),C2=lerp(m2,foot(m2),.85);
+    return t=>t<=tg?qb(A,C1,P,t/tg):qb(P,C2,B,(t-tg)/(1-tg));
+  }
+
+  // replace the arc A→B (direction dir, containing segment seg at lam) by a profile through P
+  function pull(T,iA,iB,dir,seg,lam,P,type){
+    const n=T.length,idx=arcIndices(n,iA,iB,dir),cum=[0];
+    for(let k=1;k<idx.length;k++)cum.push(cum[k-1]+dist(T[idx[k-1]],T[idx[k]]));
+    const L=cum[cum.length-1]||1;let gpos=L/2;
+    for(let k=0;k<idx.length-1;k++){
+      if(dir===1&&idx[k]===seg){gpos=cum[k]+lam*(cum[k+1]-cum[k]);break;}
+      if(dir===-1&&idx[k+1]===seg){gpos=cum[k]+(1-lam)*(cum[k+1]-cum[k]);break;}
+    }
+    const tg=Math.min(.97,Math.max(.03,gpos/L));
+    const f=profileFn(type,T[iA],T[iB],P,tg),out=T.map(p=>({x:p.x,y:p.y}));
+    for(let k=1;k<idx.length-1;k++)out[idx[k]]=f(cum[k]/L);
+    return out;
+  }
+
+  function selfIntersects(T){
+    const n=T.length,o=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+    for(let i=0;i<n;i++){
+      const a=T[i],b=T[(i+1)%n];
+      for(let j=i+2;j<n;j++){
+        if(i===0&&j===n-1)continue;
+        const c=T[j],d=T[(j+1)%n];
+        if(Math.max(a.x,b.x)<Math.min(c.x,d.x)||Math.max(c.x,d.x)<Math.min(a.x,b.x)||
+           Math.max(a.y,b.y)<Math.min(c.y,d.y)||Math.max(c.y,d.y)<Math.min(a.y,b.y))continue;
+        const d1=o(c,d,a),d2=o(c,d,b),d3=o(a,b,c),d4=o(a,b,d);
+        if(((d1>0&&d2<0)||(d1<0&&d2>0))&&((d3>0&&d4<0)||(d3<0&&d4>0)))return true;
+      }
+    }
+    return false;
+  }
+
+  return{createSession,updateDest,render,bake,nearestOnOutline,arcIndices,arcContains,pull,selfIntersects};
+})();
+
+let warpProfile='convex', warpRaf=0;
+const WARP_TOL=26, WARP_BASE_TOL=22;
+
+// current piece pixels at piece.w×piece.h, before rotation/flip
+function pieceToCanvas(){
+  const c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(piece.w));c.height=Math.max(1,Math.round(piece.h));
+  const g=c.getContext('2d');g.imageSmoothingEnabled=true;
+  if(piece.sourceCanvas) g.drawImage(piece.sourceCanvas,0,0,c.width,c.height);
+  else{
+    const t=document.createElement('canvas');t.width=piece.imageData.width;t.height=piece.imageData.height;
+    t.getContext('2d').putImageData(piece.imageData,0,0);g.drawImage(t,0,0,c.width,c.height);
+  }
+  return c;
+}
+function setPiecePixels(c,fx,fy){
+  const data=c.getContext('2d').getImageData(0,0,c.width,c.height);
+  piece.imageData=data;piece.origImageData=data;delete piece.sourceCanvas;
+  piece.w=c.width;piece.h=c.height;piece._scaleOrigW=c.width;piece._scaleOrigH=c.height;
+  piece.floatX=fx;piece.floatY=fy;
+}
+// burn rotation/flip into the pixels so the warp works on what the user sees
+function bakePieceTransforms(){
+  const fx=piece.flipHProg?flipScale(piece.flipHProg):1, fy=piece.flipVProg?flipScale(piece.flipVProg):1;
+  const ang=((piece.angle||0)%360+360)%360;
+  if(!ang&&fx===1&&fy===1) return;
+  const rad=ang*Math.PI/180,cs=Math.abs(Math.cos(rad)),sn=Math.abs(Math.sin(rad));
+  const sw=Math.abs(piece.w*fx),sh=Math.abs(piece.h*fy);
+  const W=Math.max(1,Math.ceil(sw*cs+sh*sn)+2),H=Math.max(1,Math.ceil(sw*sn+sh*cs)+2);
+  const src=pieceToCanvas(),c=document.createElement('canvas');c.width=W;c.height=H;
+  const g=c.getContext('2d');g.imageSmoothingEnabled=true;
+  g.translate(W/2,H/2);g.rotate(rad);g.scale(fx,fy);g.drawImage(src,-piece.w/2,-piece.h/2,piece.w,piece.h);
+  const cx=piece.floatX+piece.w/2,cy=piece.floatY+piece.h/2;
+  setPiecePixels(c,cx-W/2,cy-H/2);
+  piece.angle=0;piece.flipHProg=0;piece.flipVProg=0;updateAngleBadge();
+}
+
+// opaque piece (e.g. rectangle selection on white): make the background that touches
+// the piece border transparent, so the warp outline follows the object itself
+function knockOutBackground(src){
+  const W=src.width,H=src.height,N=W*H;
+  if(W<4||H<4) return null;
+  const img=src.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H),d=img.data;
+  const border=[];
+  for(let x=0;x<W;x++)border.push(x,(H-1)*W+x);
+  for(let y=1;y<H-1;y++)border.push(y*W,y*W+W-1);
+  const op=border.filter(i=>d[i*4+3]>=24);
+  let ref=[255,255,255];
+  if(op.length>=border.length*.3){
+    const med=c=>{const a=op.map(i=>d[i*4+c]).sort((p,q)=>p-q);return a[a.length>>1];};
+    ref=[med(0),med(1),med(2)];
+  }
+  const TOL=42;
+  const dist=i=>Math.max(Math.abs(d[i*4]-ref[0]),Math.abs(d[i*4+1]-ref[1]),Math.abs(d[i*4+2]-ref[2]));
+  if(op.length&&op.filter(i=>dist(i)<=TOL).length<op.length*.6) return null; // busy border (photo) — keep rectangle
+  const isBg=i=>d[i*4+3]<24||dist(i)<=TOL;
+  const bg=new Uint8Array(N),st=new Int32Array(N);let sp=0;
+  for(const i of border)if(!bg[i]&&isBg(i)){bg[i]=1;st[sp++]=i;}
+  while(sp){
+    const i=st[--sp],x=i%W;let q;
+    if(x>0){q=i-1;if(!bg[q]&&isBg(q)){bg[q]=1;st[sp++]=q;}}
+    if(x<W-1){q=i+1;if(!bg[q]&&isBg(q)){bg[q]=1;st[sp++]=q;}}
+    if(i>=W){q=i-W;if(!bg[q]&&isBg(q)){bg[q]=1;st[sp++]=q;}}
+    if(i<N-W){q=i+W;if(!bg[q]&&isBg(q)){bg[q]=1;st[sp++]=q;}}
+  }
+  let fg=0,removed=0;
+  for(let i=0;i<N;i++){const o=d[i*4+3]>=24;if(bg[i]){if(o)removed++;}else if(o)fg++;}
+  if(removed<N*.02||fg<N*.03) return null;
+  const fringe=[];
+  for(let i=0;i<N;i++){
+    if(bg[i])continue;const x=i%W;
+    if((x>0&&bg[i-1])||(x<W-1&&bg[i+1])||(i>=W&&bg[i-W])||(i<N-W&&bg[i+W]))fringe.push(i);
+  }
+  for(const i of fringe)d[i*4+3]=Math.round(d[i*4+3]*Math.min(1,dist(i)/(TOL*2.5)));
+  for(let i=0;i<N;i++)if(bg[i])d[i*4+3]=0;
+  const c=document.createElement('canvas');c.width=W;c.height=H;c.getContext('2d').putImageData(img,0,0);
+  return c;
+}
+
+function enterWarp(){
+  if(!piece) return false;
+  if(piece.warp) return true;
+  bakePieceTransforms();
+  const pc=pieceToCanvas(),s=Warp.createSession(knockOutBackground(pc)||pc);
+  if(!s){showToast('⚠️ לא נמצאה צורה לעיוות');return false;}
+  piece.warp={sess:s,base:{a:null,b:null},undo:[],crossed:false,drag:null};
+  showToast('〰 גע על קו המתאר: נקודה A ואחר כך B');
+  return true;
+}
+// burn the warp into the piece pixels (before any other edit / stamp)
+function commitWarp(){
+  if(!piece||!piece.warp) return;
+  const w=piece.warp;piece.warp=null;
+  if(w.undo.length){
+    const r=Warp.bake(w.sess);
+    setPiecePixels(r.canvas,piece.floatX+r.x,piece.floatY+r.y);
+  }
+  redrawPiece();
+}
+function warpRedraw(){if(!warpRaf)warpRaf=requestAnimationFrame(()=>{warpRaf=0;redrawPiece();});}
+
+function drawWarpPiece(){
+  const W=piece.warp,s=W.sess,T=s.T,n=T.length,d=W.drag;
+  pCtx.save();
+  pCtx.translate(piece.floatX,piece.floatY);
+  pCtx.globalAlpha=piece.xray?0.45:(piece.opacity||1);
+  Warp.render(s,pCtx,.6);
+  pCtx.globalAlpha=1;
+  const bad=d&&d.dir?d.invalid:W.crossed;
+  pCtx.beginPath();T.forEach((p,i)=>i?pCtx.lineTo(p.x,p.y):pCtx.moveTo(p.x,p.y));pCtx.closePath();
+  if(bad){pCtx.strokeStyle='#e53935';pCtx.lineWidth=3;}
+  else{pCtx.strokeStyle='rgba(233,69,96,.85)';pCtx.lineWidth=1.5;pCtx.setLineDash([6,4]);}
+  pCtx.stroke();pCtx.setLineDash([]);
+  if(d&&d.dir&&W.base.a!=null&&W.base.b!=null){
+    const idx=Warp.arcIndices(n,W.base.a,W.base.b,d.dir);
+    pCtx.beginPath();idx.forEach((k,i)=>i?pCtx.lineTo(T[k].x,T[k].y):pCtx.moveTo(T[k].x,T[k].y));
+    pCtx.strokeStyle=d.invalid?'#e53935':'#e94560';pCtx.lineWidth=3;pCtx.stroke();
+    pCtx.fillStyle='#e94560';pCtx.beginPath();pCtx.arc(d.P.x,d.P.y,5,0,Math.PI*2);pCtx.fill();
+  }
+  [['a','#4caf50','A'],['b','#2196f3','B']].forEach(([k,col,lbl])=>{
+    if(W.base[k]==null)return;const p=T[W.base[k]];
+    pCtx.beginPath();pCtx.arc(p.x,p.y,10,0,Math.PI*2);pCtx.fillStyle=col;pCtx.fill();
+    pCtx.lineWidth=2.5;pCtx.strokeStyle='#fff';pCtx.stroke();
+    pCtx.fillStyle='#fff';pCtx.font='bold 11px Heebo,sans-serif';pCtx.textAlign='center';pCtx.textBaseline='middle';
+    pCtx.fillText(lbl,p.x,p.y+.5);
+  });
+  pCtx.restore();
+}
+function warpBBox(){
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for(const p of piece.warp.sess.dest){if(p.x<x0)x0=p.x;if(p.y<y0)y0=p.y;if(p.x>x1)x1=p.x;if(p.y>y1)y1=p.y;}
+  return{x0:piece.floatX+x0,y0:piece.floatY+y0,x1:piece.floatX+x1,y1:piece.floatY+y1};
+}
+
+function warpDown(x,y){
+  const W=piece.warp,p={x:x-piece.floatX,y:y-piece.floatY},near=Warp.nearestOnOutline(W.sess.T,p);
+  if(!near||near.dist>WARP_TOL) return false;
+  let baseHit=null;
+  for(const k of['a','b']){
+    if(W.base[k]==null)continue;const q=W.sess.T[W.base[k]];
+    if(Math.hypot(q.x-p.x,q.y-p.y)<WARP_BASE_TOL)baseHit=k;
+  }
+  W.drag={start:p,near,baseHit,moved:false,snapshot:W.sess.T.map(q=>({x:q.x,y:q.y})),dir:0,invalid:false,P:near.pt};
+  return true;
+}
+function warpMove(x,y){
+  const W=piece.warp,d=W.drag,p={x:x-piece.floatX,y:y-piece.floatY};
+  if(!d.moved&&Math.hypot(p.x-d.start.x,p.y-d.start.y)<7) return;
+  d.moved=true;
+  const n=W.sess.T.length;
+  if(d.baseHit){
+    const nn=Warp.nearestOnOutline(W.sess.T,p),idx=nn.lam<.5?nn.seg:(nn.seg+1)%n;
+    const other=d.baseHit==='a'?W.base.b:W.base.a;
+    if(idx!==other)W.base[d.baseHit]=idx;
+    warpRedraw();return;
+  }
+  if(W.base.a==null||W.base.b==null){W.drag=null;showToast('〰 קבע קודם שתי נקודות בסיס על הקו');return;}
+  if(!d.dir){
+    d.dir=Warp.arcContains(n,W.base.a,W.base.b,1,d.near.seg)?1:-1;
+    W.undo.push({T:d.snapshot,base:{...W.base}});
+  }
+  d.P={x:d.near.pt.x+(p.x-d.start.x),y:d.near.pt.y+(p.y-d.start.y)};
+  W.sess.T=Warp.pull(d.snapshot,W.base.a,W.base.b,d.dir,d.near.seg,d.near.lam,d.P,warpProfile);
+  d.invalid=Warp.selfIntersects(W.sess.T);
+  Warp.updateDest(W.sess);warpRedraw();
+}
+function warpUp(){
+  const W=piece.warp,d=W.drag;W.drag=null;
+  if(!d.moved){
+    const n=W.sess.T.length,idx=d.near.lam<.5?d.near.seg:(d.near.seg+1)%n,T=W.sess.T;
+    if(W.base.a==null){W.base.a=idx;showToast('〰 נקודה A נקבעה — גע בנקודה B');}
+    else if(W.base.b==null){if(idx!==W.base.a){W.base.b=idx;showToast('〰 גרור מכל נקודה על הקו בין A ל-B');}}
+    else{
+      const da=Math.hypot(T[W.base.a].x-d.start.x,T[W.base.a].y-d.start.y);
+      const db=Math.hypot(T[W.base.b].x-d.start.x,T[W.base.b].y-d.start.y);
+      if(da<=db){if(idx!==W.base.b)W.base.a=idx;}else{if(idx!==W.base.a)W.base.b=idx;}
+    }
+  } else if(d.dir){
+    const was=W.crossed;W.crossed=d.invalid;
+    if(W.crossed&&!was)showToast('⚠️ קו המתאר חותך את עצמו — אפשר להמשיך, או ↩️ בטל');
+  }
+  redrawPiece();
+}
+function warpUndo(){
+  const W=piece.warp,u=W.undo.pop();
+  W.sess.T=u.T;W.base=u.base;Warp.updateDest(W.sess);W.crossed=Warp.selfIntersects(W.sess.T);
+  redrawPiece();showToast('↩ עיוות בוטל');
+}
+function setWarpProfile(p){
+  warpProfile=p;
+  ['tri','convex','concave'].forEach(k=>{const b=document.getElementById('warpP_'+k);if(b)b.classList.toggle('active',k===p);});
+}
+function warpClearBase(){
+  if(!piece||!piece.warp)return;
+  piece.warp.base={a:null,b:null};redrawPiece();showToast('〰 נקודות נוקו — גע בנקודה A');
+}
+function warpControlHTML(){
+  const ico=d=>`<svg viewBox="0 0 30 20" style="width:26px;height:16px;stroke:currentColor;stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round">${d}</svg>`;
+  const b=(p,d,l)=>`<button id="warpP_${p}" class="blend-btn${warpProfile===p?' active':''}" onclick="setWarpProfile('${p}')">${ico(d)}${l}</button>`;
+  return b('tri','<path d="M2 18 L15 3 L28 18"/>','משולש')+
+    b('convex','<path d="M2 18 Q4 3 15 3 Q26 3 28 18"/>','קמור')+
+    b('concave','<path d="M2 18 Q13 16 15 3 Q17 16 28 18"/>','קעור')+
+    `<button class="blend-btn" onclick="warpClearBase()"><span class="icon">⊗</span>נקודות</button>`;
+}
+
+
 // ── PIECE DRAG ──
 PC.addEventListener('pointerdown',onPieceDown,{passive:false});
 PC.addEventListener('pointermove',onPieceMove,{passive:false});
 PC.addEventListener('pointerup',  onPieceUp,  {passive:false});
-PC.addEventListener('pointercancel',()=>{if(piece)piece.isDragging=false;},{passive:false});
+PC.addEventListener('pointercancel',()=>{if(piece){piece.isDragging=false;if(piece.warp&&piece.warp.drag)warpUp();}},{passive:false});
 
 function hitPiece(x,y){
+  if(piece&&piece.warp){const b=warpBBox();return x>=b.x0&&x<=b.x1&&y>=b.y0&&y<=b.y1;}
   return piece&&x>=piece.floatX&&x<=piece.floatX+piece.w&&y>=piece.floatY&&y<=piece.floatY+piece.h;
 }
 function onPieceDown(e){
   if(!piece)return;
   e.preventDefault();e.stopPropagation();
   const[x,y]=getPos(e,PC);
+  if(piece.warp&&warpDown(x,y)){try{PC.setPointerCapture(e.pointerId);}catch(ex){}return;}
   if(!hitPiece(x,y))return;
   piece.isDragging=true;
   piece.dsx=x;piece.dsy=y;piece.dox=piece.floatX;piece.doy=piece.floatY;
   try{PC.setPointerCapture(e.pointerId);}catch(ex){}
   PC.style.cursor='grabbing';
-  closePieceControlRow();
+  if(!piece.warp) closePieceControlRow();
 }
 function onPieceMove(e){
+  if(piece&&piece.warp&&piece.warp.drag){e.preventDefault();e.stopPropagation();const[x,y]=getPos(e,PC);warpMove(x,y);return;}
   if(!piece||!piece.isDragging)return;
   e.preventDefault();e.stopPropagation();
   const[x,y]=getPos(e,PC);
@@ -3319,6 +3797,7 @@ function onPieceMove(e){
   redrawPiece();
 }
 function onPieceUp(e){
+  if(piece&&piece.warp&&piece.warp.drag){e.preventDefault();e.stopPropagation();warpUp();return;}
   if(!piece||!piece.isDragging)return;
   e.preventDefault();e.stopPropagation();
   piece.isDragging=false;
@@ -3328,6 +3807,7 @@ function onPieceUp(e){
 
 function stampPiece(){
   if(!piece)return;
+  if(piece.warp) commitWarp();
   const src=piece.sourceCanvas || document.createElement('canvas');
   if(!piece.sourceCanvas){
     src.width=piece.w; src.height=piece.h;
@@ -3515,7 +3995,8 @@ function getFlatCanvas(){
   const tmp=document.createElement('canvas');tmp.width=MC.width;tmp.height=MC.height;
   const tc=tmp.getContext('2d');tc.fillStyle='#fff';tc.fillRect(0,0,tmp.width,tmp.height);
   tc.drawImage(MC,0,0);
-  if(piece){const t2=document.createElement('canvas');t2.width=piece.w;t2.height=piece.h;t2.getContext('2d').putImageData(piece.imageData,0,0);tc.drawImage(t2,piece.floatX,piece.floatY);}
+  if(piece&&piece.warp){const r=Warp.bake(piece.warp.sess);tc.drawImage(r.canvas,piece.floatX+r.x,piece.floatY+r.y);}
+  else if(piece){const t2=document.createElement('canvas');t2.width=piece.w;t2.height=piece.h;t2.getContext('2d').putImageData(piece.imageData,0,0);tc.drawImage(t2,piece.floatX,piece.floatY);}
   const cr=MC.getBoundingClientRect();
   document.querySelectorAll('.text-label').forEach(el=>{
     const fs=parseFloat(el.style.fontSize)||22,clr=el.style.color||'#000';
@@ -4626,6 +5107,7 @@ function buildHelp(){
     ['⚡','מיזוג','רגיל / כפל / בהיר.'],
     ['⬜','שקיפות','10%–100%.'],
     ['🔍','X-Ray','שקיפות 45% למיקום מדויק מעל הציור.'],
+    ['〰','עיוות','גע על קו המתאר לקביעת נקודה A ואחר כך B. גרור מכל נקודה על הקו שבין A ל-B, לכל כיוון. צורה: משולש / קמור / קעור — נשמרת עד שמשנים. נגיעה נוספת על הקו מחליפה את הנקודה הקרובה, וגרירת A או B מזיזה אותה. ⊗ מנקה נקודות. קו אדום = הקו חותך את עצמו (מותר). ↩️ בטל מבטל משיכה אחרונה. סיבוב והיפוך נצרבים בכניסה לעיוות.'],
     ['👁','הסתר פאנל','מסתיר פס האייקונים.'],
     ['📌','קבע','אפה לקנבס.'],
     ['✕','בטל','החזר למקום המקורי ואפה.'],
