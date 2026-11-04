@@ -300,6 +300,45 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;
   }
 }
 
+/* ── WALLPAPER FILL PANEL ── */
+#wallpaperPanel{
+  display:none;position:fixed;z-index:60;
+  bottom:var(--bar-h);left:0;right:0;
+  background:var(--panel);border-top:2px solid #9c5fce;
+  border-radius:16px 16px 0 0;
+  padding:10px 14px 12px;
+  flex-direction:column;gap:8px;
+  box-shadow:0 -4px 20px rgba(0,0,0,.5);
+  font-family:'Heebo',sans-serif;direction:rtl;
+  max-height:80vh;overflow-y:auto;
+}
+#wallpaperPanel.open{display:flex;}
+#wallpaperPanel .wp-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+#wallpaperPanel .wp-title{font-size:14px;font-weight:600;color:#c990f0;}
+#wallpaperPanel .wp-label{font-size:11px;color:var(--muted);min-width:40px;}
+.wp-btn{padding:5px 11px;border-radius:10px;background:#2a1f3a;border:1.5px solid #6a4a9a;
+  color:#c090e0;font-family:'Heebo',sans-serif;font-size:12px;cursor:pointer;}
+.wp-btn.active{background:#6a4a9a;color:#fff;border-color:#9c5fce;}
+.wp-btn:active{background:var(--accent2);}
+#wpLibrary{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0;}
+.wp-thumb{
+  width:52px;height:52px;border-radius:8px;cursor:pointer;
+  border:2px solid #3a2a5a;overflow:hidden;position:relative;flex-shrink:0;
+}
+.wp-thumb.active{border-color:#9c5fce;box-shadow:0 0 0 2px #c090e0;}
+.wp-thumb canvas{width:100%;height:100%;}
+.wp-thumb .wp-del{
+  position:absolute;top:1px;right:1px;width:16px;height:16px;
+  background:rgba(220,50,50,.85);color:#fff;border:none;border-radius:50%;
+  font-size:10px;cursor:pointer;display:none;align-items:center;justify-content:center;
+  line-height:1;
+}
+.wp-thumb:hover .wp-del,.wp-thumb.active .wp-del{display:flex;}
+#wpPreviewBox{
+  width:80px;height:80px;border-radius:10px;border:1.5px solid #3a2a5a;
+  overflow:hidden;flex-shrink:0;background:#fff;
+}
+#wpPreviewBox canvas{width:100%;height:100%;}
 /* ── iOS SAFARI FIXES ── */
 /* prevent bounce/overscroll */
 body{ position:fixed; overflow:hidden; }
@@ -615,6 +654,9 @@ body{ position:fixed; overflow:hidden; }
   <button class="tool-btn active" id="btnDraw"  onclick="setMode('draw')">
     <span class="icon">✏️</span><span class="lbl">ציור</span>
   </button>
+  <button class="tool-btn" id="btnWallpaper" onclick="setMode('wallpaper')">
+    <span class="icon">🧩</span><span class="lbl">טפט</span>
+  </button>
   <button class="tool-btn" onclick="toggleColorMix()"><span class="icon">🎨</span><span class="lbl">ערבוב</span></button>
   <button class="tool-btn" id="btnNatural" onclick="setMode('natural')">
     <span class="icon">🖌️</span><span class="lbl">מברשת</span>
@@ -728,6 +770,94 @@ body{ position:fixed; overflow:hidden; }
       💉 ערבב
     </button>
   </div>
+</div>
+
+<!-- WALLPAPER PANEL -->
+<div id="wallpaperPanel">
+  <div class="wp-row" style="justify-content:space-between;">
+    <span class="wp-title">🧩 מילוי טפט</span>
+    <button class="wp-btn" onclick="toggleWallpaperPanel()" style="padding:4px 10px;">✕ סגור</button>
+  </div>
+  <div class="wp-row" style="align-items:flex-start;gap:10px;">
+    <div style="flex:1;">
+      <div class="wp-label" style="margin-bottom:4px;">ספריית טפטים:</div>
+      <div id="wpLibrary">
+        <button class="wp-btn" onclick="wpCapture()" style="height:52px;width:52px;font-size:20px;padding:0;" title="סמן אזור/חתיכה ולחץ כאן לשמירה">➕</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div class="wp-label" style="text-align:center;">תצוגה מקדימה</div>
+      <div id="wpPreviewBox"><canvas id="wpPreviewCanvas" width="160" height="160"></canvas></div>
+    </div>
+  </div>
+  <div class="wp-row">
+    <span class="wp-label">גודל:</span>
+    <button class="wp-btn active" onclick="wpSetScale('1')"      id="wpS1"  >100%</button>
+    <button class="wp-btn"        onclick="wpSetScale('0.5')"    id="wpS05" >50%</button>
+    <button class="wp-btn"        onclick="wpSetScale('2')"      id="wpS2"  >200%</button>
+    <button class="wp-btn"        onclick="wpSetScale('custom')" id="wpSC"  >מותאם</button>
+    <span id="wpScaleCustomRow" style="display:none;align-items:center;gap:4px;">
+      <input type="range" id="wpScaleSlider" min="10" max="400" value="100"
+        oninput="wpCustomScale(this.value)"
+        style="width:90px;accent-color:#9c5fce;">
+      <span id="wpScaleVal" style="font-size:11px;color:var(--muted);min-width:34px;">100%</span>
+    </span>
+  </div>
+  <div class="wp-row">
+    <span class="wp-label">זווית:</span>
+    <button class="wp-btn active" onclick="wpSetAngle(0)"        id="wpA0"  >0°</button>
+    <button class="wp-btn"        onclick="wpSetAngle(45)"       id="wpA45" >45°</button>
+    <button class="wp-btn"        onclick="wpSetAngle(90)"       id="wpA90" >90°</button>
+    <button class="wp-btn"        onclick="wpSetAngle('custom')" id="wpAC"  >מותאם</button>
+    <span id="wpAngleCustomRow" style="display:none;align-items:center;gap:4px;">
+      <input type="range" id="wpAngleSlider" min="0" max="359" value="0"
+        oninput="wpCustomAngle(this.value)"
+        style="width:90px;accent-color:#9c5fce;">
+      <span id="wpAngleVal" style="font-size:11px;color:var(--muted);min-width:30px;">0°</span>
+    </span>
+  </div>
+  <div class="wp-row">
+    <span class="wp-label">היסט:</span>
+    <span style="font-size:11px;color:var(--muted);">X</span>
+    <input type="range" id="wpOffXSlider" min="-100" max="100" value="0"
+      oninput="wpSetOffset('x',this.value)"
+      style="width:80px;accent-color:#9c5fce;">
+    <span id="wpOffXVal" style="font-size:11px;color:var(--muted);min-width:28px;">0</span>
+    <span style="font-size:11px;color:var(--muted);">Y</span>
+    <input type="range" id="wpOffYSlider" min="-100" max="100" value="0"
+      oninput="wpSetOffset('y',this.value)"
+      style="width:80px;accent-color:#9c5fce;">
+    <span id="wpOffYVal" style="font-size:11px;color:var(--muted);min-width:28px;">0</span>
+  </div>
+  <div class="wp-row">
+    <span class="wp-label">חזרה:</span>
+    <button class="wp-btn active" id="wpRGrid"  onclick="wpSetRepeat('grid')"    >רשת</button>
+    <button class="wp-btn"        id="wpRBrick" onclick="wpSetRepeat('brick')"   >לבנים</button>
+    <button class="wp-btn"        id="wpRMirX"  onclick="wpSetRepeat('mirrorx')" >שיקוף X</button>
+    <button class="wp-btn"        id="wpRMirXY" onclick="wpSetRepeat('mirrorxy')">שיקוף XY</button>
+  </div>
+  <div class="wp-row" style="justify-content:center;padding-top:4px;">
+    <button class="wp-btn" onclick="wpFill()"
+      style="background:#6a4a9a;color:#fff;border-color:#9c5fce;padding:8px 20px;font-size:13px;">
+      🧩 מלא בטפט — לחץ על שטח סגור
+    </button>
+  </div>
+</div>
+
+<!-- floating tip button -->
+<button id="helpTipBtn" onclick="showModeTip()" title="טיפ לכלי הנוכחי"
+  style="position:fixed;top:8px;right:8px;z-index:70;width:30px;height:30px;border-radius:50%;
+         background:rgba(233,69,96,0.85);border:none;color:#fff;font-size:15px;
+         cursor:pointer;display:flex;align-items:center;justify-content:center;
+         box-shadow:0 2px 6px rgba(0,0,0,0.5);line-height:1;">❓</button>
+<!-- mode tip popup -->
+<div id="modeTipBox" onclick="this.style.display='none'"
+  style="display:none;position:fixed;top:46px;right:8px;z-index:75;max-width:260px;
+         background:#16213e;border:1px solid #4caf50;border-radius:10px;
+         padding:12px 14px;color:#eaeaea;font-size:13px;line-height:1.6;
+         box-shadow:0 4px 16px rgba(0,0,0,0.6);direction:rtl;font-family:'Heebo',sans-serif;">
+  <div id="modeTipText"></div>
+  <div style="margin-top:8px;text-align:left;color:#888;font-size:11px;">לחץ לסגירה</div>
 </div>
 
 <div id="helpPanel" style="display:none;position:fixed;z-index:80;top:0;left:0;right:0;bottom:0;
@@ -2224,11 +2354,18 @@ document.addEventListener('keydown',e=>{
 // ── MODE ──
 function setMode(m){
   commitText();deselectLabels();
+  // when entering wallpaper mode, save current selection before clearing
+  if(m==='wallpaper'&&typeof selRect!=='undefined'&&selRect){
+    wpPendingSel=Object.assign({},selRect);
+  } else if(m!=='wallpaper'){
+    wpPendingSel=null;
+  }
   if(m!=='rect'&&m!=='lasso'){clearSel();}
   if(piece) stampPiece();
   mode=m;
+  const tb=document.getElementById('modeTipBox');if(tb)tb.style.display='none';
   MC.style.pointerEvents=(m==='ruler'||m==='compass'||m==='cut'||m==='zoom')?'none':'auto';
-  MC.style.cursor={draw:'crosshair',eraser:'cell',fill:'crosshair',text:'text',rect:'crosshair',lasso:'crosshair',shape:'crosshair',ruler:'default',compass:'default',natural:'crosshair',zoom:'move',eyedrop:'crosshair',scatter:'crosshair',cut:'crosshair'}[m]||'crosshair';
+  MC.style.cursor={draw:'crosshair',eraser:'cell',fill:'crosshair',text:'text',rect:'crosshair',lasso:'crosshair',shape:'crosshair',ruler:'default',compass:'default',natural:'crosshair',zoom:'move',eyedrop:'crosshair',scatter:'crosshair',cut:'crosshair',wallpaper:'crosshair'}[m]||'crosshair';
   // show/hide overlay canvases and compass/cut controls
   RC.style.display=m==='ruler'?'block':'none';
   CC.style.display=m==='compass'?'block':'none';
@@ -2260,7 +2397,10 @@ function setMode(m){
     showToast('🔵 גרור המחוגה • לחץ "הצמד חוד" לקיבוע');
   }
   document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
-  const idMap={draw:'btnDraw',eraser:'btnErase',fill:'btnFill',text:'btnText',rect:'btnRect',lasso:'btnLasso',shape:'btnShape',ruler:'btnRuler',compass:'btnCompass',natural:'btnNatural',eyedrop:'btnEyedrop',scatter:'btnScatter',cut:'btnCut'};
+  const idMap={draw:'btnDraw',eraser:'btnErase',fill:'btnFill',text:'btnText',rect:'btnRect',lasso:'btnLasso',shape:'btnShape',ruler:'btnRuler',compass:'btnCompass',natural:'btnNatural',eyedrop:'btnEyedrop',scatter:'btnScatter',cut:'btnCut',wallpaper:'btnWallpaper'};
+  const wpPanel=document.getElementById('wallpaperPanel');
+  if(wpPanel){if(m==='wallpaper')wpPanel.classList.add('open');else wpPanel.classList.remove('open');}
+  if(m==='wallpaper') showToast('🧩 לחץ על שטח סגור בציור כדי למלא בטפט');
   const el=document.getElementById(idMap[m]);
   if(el) el.classList.add('active');
   // show/hide natural brush intensity controls
@@ -2594,6 +2734,7 @@ function onDown(e){
     return;
   }
   if(mode==='fill'){saveHistory();floodFill(e);return;}
+  if(mode==='wallpaper'){saveHistory();wallpaperFill(e);return;}
   if(mode==='rect'||mode==='lasso'){startSel(e);return;}
   if(mode==='shape'){
     const[x,y]=getPos(e);
@@ -3954,6 +4095,276 @@ function floodFill(e){
   ctx.putImageData(img,0,0);showToast('🪣 מולא!');
 }
 
+// ── WALLPAPER FILL ──
+let wpLibraryData=[];   // [{dataURL,w,h,name}]
+let wpPendingSel=null;  // selection saved before entering wallpaper mode
+let wpActive=null;      // index into wpLibraryData
+let wpSettings={scale:1,angle:0,offX:0,offY:0,repeat:'grid'};
+
+function toggleWallpaperPanel(){setMode('select');}
+
+function wpLoadStorage(){
+  try{
+    const saved=localStorage.getItem('wpLibrary');
+    if(!saved)return;
+    wpLibraryData=JSON.parse(saved);
+    wpRenderLibrary();
+    if(wpLibraryData.length>0){wpActive=0;wpUpdatePreview();}
+  }catch(ex){console.warn('wpLoad',ex);}
+}
+function wpSaveStorage(){
+  try{
+    const data=wpLibraryData.map(t=>({dataURL:t.dataURL,w:t.w,h:t.h,name:t.name}));
+    localStorage.setItem('wpLibrary',JSON.stringify(data));
+  }catch(ex){console.warn('wpSave',ex);}
+}
+
+function wpCapture(){
+  let src=null,sw=0,sh=0;
+  // prefer floating piece
+  if(typeof piece!=='undefined'&&piece&&piece.imageData){
+    sw=piece.imageData.width;sh=piece.imageData.height;
+    const tmp=document.createElement('canvas');tmp.width=sw;tmp.height=sh;
+    tmp.getContext('2d').putImageData(piece.imageData,0,0);
+    src=tmp;
+  } else {
+    // use current selRect or the one saved when entering wallpaper mode
+    const r=(typeof selRect!=='undefined'&&selRect)||wpPendingSel;
+    if(r){
+      sw=r.w||r.width||0;sh=r.h||r.height||0;
+      if(sw>0&&sh>0){
+        const tmp=document.createElement('canvas');tmp.width=sw;tmp.height=sh;
+        tmp.getContext('2d').drawImage(MC,r.x,r.y,sw,sh,0,0,sw,sh);
+        src=tmp;
+      }
+    }
+  }
+  if(!src||sw<=0||sh<=0){showToast('⚠️ סמן אזור או חתיכה תחילה');return;}
+  const dataURL=src.toDataURL();
+  const tile={dataURL,w:sw,h:sh,name:'טפט '+(wpLibraryData.length+1)};
+  wpLibraryData.push(tile);
+  wpActive=wpLibraryData.length-1;
+  wpSaveStorage();
+  wpRenderLibrary();
+  wpUpdatePreview();
+  showToast('✅ טפט נשמר לספרייה');
+}
+
+function wpDeleteTile(idx){
+  wpLibraryData.splice(idx,1);
+  if(wpActive>=wpLibraryData.length) wpActive=wpLibraryData.length-1;
+  if(wpActive<0) wpActive=null;
+  wpSaveStorage();
+  wpRenderLibrary();
+  wpUpdatePreview();
+}
+
+function wpSelectTile(idx){
+  wpActive=idx;
+  wpRenderLibrary();
+  wpUpdatePreview();
+}
+
+function wpRenderLibrary(){
+  const lib=document.getElementById('wpLibrary');
+  if(!lib)return;
+  // keep the + button, rebuild thumbs
+  lib.innerHTML='';
+  const addBtn=document.createElement('button');
+  addBtn.className='wp-btn';
+  addBtn.style.cssText='height:52px;width:52px;font-size:20px;padding:0;';
+  addBtn.title='סמן אזור/חתיכה ולחץ כאן לשמירה';
+  addBtn.textContent='➕';
+  addBtn.onclick=wpCapture;
+  lib.appendChild(addBtn);
+
+  wpLibraryData.forEach((tile,i)=>{
+    const thumb=document.createElement('div');
+    thumb.className='wp-thumb'+(i===wpActive?' active':'');
+    // draw thumbnail
+    const tc=document.createElement('canvas');tc.width=52;tc.height=52;
+    const ttx=tc.getContext('2d');
+    const img=new Image();
+    img.onload=()=>{ttx.drawImage(img,0,0,52,52);};
+    img.src=tile.dataURL;
+    thumb.appendChild(tc);
+    // delete button
+    const del=document.createElement('button');
+    del.className='wp-del';del.textContent='×';
+    del.onclick=(e)=>{e.stopPropagation();wpDeleteTile(i);};
+    thumb.appendChild(del);
+    thumb.onclick=()=>wpSelectTile(i);
+    lib.appendChild(thumb);
+  });
+}
+
+function wpBuildPattern(tile, destCtx, previewW, previewH){
+  const sc=wpSettings.scale;
+  const tw=Math.max(1,Math.round(tile.w*sc));
+  const th=Math.max(1,Math.round(tile.h*sc));
+  const rep=wpSettings.repeat;
+
+  // build cell canvas based on repeat type
+  let cellW=tw,cellH=th;
+  if(rep==='brick') cellH=th*2;
+
+  const cell=document.createElement('canvas');
+  cell.width=cellW;cell.height=cellH;
+  const cx=cell.getContext('2d');
+
+  const tmpImg=new Image();
+  tmpImg.src=tile.dataURL;
+  // draw synchronously if already loaded (data URL)
+  cx.drawImage(tmpImg,0,0,tw,th);
+  if(rep==='mirrorx'||rep==='mirrorxy'){
+    cx.save();cx.translate(tw,0);cx.scale(-1,1);cx.drawImage(tmpImg,0,0,tw,th);cx.restore();
+  }
+  if(rep==='mirrorxy'){
+    cx.save();cx.translate(0,th);cx.scale(1,-1);cx.drawImage(tmpImg,0,0,tw,th);cx.restore();
+    cx.save();cx.translate(tw,th);cx.scale(-1,-1);cx.drawImage(tmpImg,0,0,tw,th);cx.restore();
+  }
+  if(rep==='brick'){
+    // second row offset by half
+    cx.drawImage(tmpImg,0,th,tw,th);
+    if(rep==='mirrorx'||rep==='mirrorxy'){
+      cx.save();cx.translate(tw,th);cx.scale(-1,1);cx.drawImage(tmpImg,0,0,tw,th);cx.restore();
+    }
+    // offset second row
+    const offC=document.createElement('canvas');offC.width=cellW;offC.height=th;
+    const offCtx=offC.getContext('2d');
+    offCtx.drawImage(cell,0,th,cellW,th,0,0,cellW,th);
+    // shift by half width
+    cx.clearRect(0,th,cellW,th);
+    cx.drawImage(offC,tw/2,th);
+    cx.drawImage(offC,tw/2-cellW,th);
+  }
+
+  const pat=destCtx.createPattern(cell,'repeat');
+  if(pat&&pat.setTransform){
+    const m=new DOMMatrix();
+    m.translateSelf(wpSettings.offX,wpSettings.offY);
+    m.rotateSelf(wpSettings.angle);
+    pat.setTransform(m);
+  }
+  return pat;
+}
+
+function wpUpdatePreview(){
+  const pc=document.getElementById('wpPreviewCanvas');
+  if(!pc)return;
+  const pctx=pc.getContext('2d');
+  pctx.clearRect(0,0,160,160);
+  if(wpActive===null||!wpLibraryData[wpActive]){return;}
+  const tile=wpLibraryData[wpActive];
+  // load image synchronously via Image
+  const img=new Image();
+  img.onload=()=>{
+    // rebuild tile with loaded image
+    const pat=wpBuildPattern({dataURL:tile.dataURL,w:tile.w,h:tile.h},pctx,160,160);
+    if(pat){pctx.fillStyle=pat;pctx.fillRect(0,0,160,160);}
+  };
+  img.src=tile.dataURL;
+}
+
+function wallpaperFill(e){
+  if(wpActive===null||!wpLibraryData[wpActive]){showToast('⚠️ בחר טפט מהספרייה תחילה');return;}
+  const tile=wpLibraryData[wpActive];
+  const[fx,fy]=getPos(e);
+  const W=MC.width,H=MC.height;
+  const x0=Math.round(fx),y0=Math.round(fy);
+  if(x0<0||y0<0||x0>=W||y0>=H)return;
+
+  const img=ctx.getImageData(0,0,W,H);const d=img.data;
+  const si=(y0*W+x0)*4;
+  const tgt=[d[si],d[si+1],d[si+2],d[si+3]];
+
+  // flood-fill to get mask
+  const mask=new Uint8Array(W*H);
+  const stk=[x0+y0*W];mask[x0+y0*W]=1;
+  while(stk.length){
+    const pos=stk.pop();const px=pos%W,py=(pos-px)/W;
+    mask[pos]=2; // filled
+    [[pos-1,px>0],[pos+1,px<W-1],[pos-W,py>0],[pos+W,py<H-1]].forEach(([n,ok])=>{
+      if(ok&&!mask[n]&&clrMatch(d,n*4,tgt,30)){mask[n]=1;stk.push(n);}
+    });
+  }
+
+  // paint pattern into offscreen, then apply to filled pixels
+  const off=document.createElement('canvas');off.width=W;off.height=H;
+  const offCtx=off.getContext('2d');
+
+  const imgEl=new Image();
+  imgEl.onload=()=>{
+    const tileCopy={dataURL:tile.dataURL,w:tile.w,h:tile.h};
+    const pat=wpBuildPattern(tileCopy,offCtx,W,H);
+    if(pat){offCtx.fillStyle=pat;offCtx.fillRect(0,0,W,H);}
+    const patData=offCtx.getImageData(0,0,W,H).data;
+    for(let i=0;i<W*H;i++){
+      if(mask[i]===2){
+        const px=i*4;
+        d[px]=patData[px];d[px+1]=patData[px+1];d[px+2]=patData[px+2];d[px+3]=patData[px+3];
+      }
+    }
+    ctx.putImageData(img,0,0);
+    showToast('🧩 מולא בטפט!');
+  };
+  imgEl.src=tile.dataURL;
+}
+
+function wpSetScale(v){
+  ['wpS1','wpS05','wpS2','wpSC'].forEach(id=>{const b=document.getElementById(id);if(b)b.classList.remove('active');});
+  const cr=document.getElementById('wpScaleCustomRow');
+  if(v==='custom'){
+    if(cr)cr.style.display='flex';
+    document.getElementById('wpSC').classList.add('active');
+  } else {
+    if(cr)cr.style.display='none';
+    wpSettings.scale=parseFloat(v);
+    const map={'1':'wpS1','0.5':'wpS05','2':'wpS2'};
+    if(map[v]){const b=document.getElementById(map[v]);if(b)b.classList.add('active');}
+    wpUpdatePreview();
+  }
+}
+function wpCustomScale(v){
+  wpSettings.scale=parseInt(v)/100;
+  document.getElementById('wpScaleVal').textContent=v+'%';
+  wpUpdatePreview();
+}
+function wpSetAngle(v){
+  ['wpA0','wpA45','wpA90','wpAC'].forEach(id=>{const b=document.getElementById(id);if(b)b.classList.remove('active');});
+  const cr=document.getElementById('wpAngleCustomRow');
+  if(v==='custom'){
+    if(cr)cr.style.display='flex';
+    document.getElementById('wpAC').classList.add('active');
+  } else {
+    if(cr)cr.style.display='none';
+    wpSettings.angle=parseInt(v);
+    const map={0:'wpA0',45:'wpA45',90:'wpA90'};
+    if(map[v]!==undefined){const b=document.getElementById(map[v]);if(b)b.classList.add('active');}
+    wpUpdatePreview();
+  }
+}
+function wpCustomAngle(v){
+  wpSettings.angle=parseInt(v);
+  document.getElementById('wpAngleVal').textContent=v+'°';
+  wpUpdatePreview();
+}
+function wpSetOffset(axis,v){
+  if(axis==='x'){wpSettings.offX=parseInt(v);document.getElementById('wpOffXVal').textContent=v;}
+  else{wpSettings.offY=parseInt(v);document.getElementById('wpOffYVal').textContent=v;}
+  wpUpdatePreview();
+}
+function wpSetRepeat(r){
+  ['wpRGrid','wpRBrick','wpRMirX','wpRMirXY'].forEach(id=>{const b=document.getElementById(id);if(b)b.classList.remove('active');});
+  wpSettings.repeat=r;
+  const map={grid:'wpRGrid',brick:'wpRBrick',mirrorx:'wpRMirX',mirrorxy:'wpRMirXY'};
+  if(map[r]){const b=document.getElementById(map[r]);if(b)b.classList.add('active');}
+  wpUpdatePreview();
+}
+function wpFill(){showToast('🧩 לחץ על שטח סגור בציור כדי למלא בטפט');}
+
+window.addEventListener('load',()=>{wpLoadStorage();});
+
 // ── TEXT ──
 function handleTextClick(e){
   const[x,y]=getPos(e);commitText();
@@ -5037,13 +5448,44 @@ function closeSortPanel(){
 
 
 
+const modeTips={
+  draw:     '✏️ <strong>ציור חופשי</strong><br>עובי: − ו+ בסרגל העליון (קפיצה 0.25 מתחת ל-1, קפיצה 1 מעל).<br>מראה X/Y: שיקוף בזמן אמת.',
+  natural:  '🖌️ <strong>מברשת טבעית</strong><br>גוונים אקראיים ומריחה.<br>סליידר "עוצמה" בסרגל העליון — גבוה יותר = גוונים רחבים יותר.',
+  eraser:   '🧹 <strong>מחק</strong><br>עובי שולט בגודל הראש.<br>טיפ: עובי גדול + לחיצה קצרה לניקוי שטח רחב.',
+  fill:     '🪣 <strong>מילוי</strong><br>ממלא שטח סגור בצבע הנוכחי.<br>עם מראה פעיל — ממלא גם בצד המשוקף.',
+  scatter:  '✦ <strong>פיזור</strong><br>לחץ בתוך צורה סגורה לפיזור נקודות/אובייקטים.<br>כמות=1 → בדיוק במקום הלחיצה. ⬤ לטעינת תמונה כאובייקט.',
+  text:     '🔤 <strong>טקסט</strong><br>לחץ על הקנבס להוספת טקסט.<br>גודל: − ו+ בסרגל העליון.',
+  shape:    '🔷 <strong>צורות</strong><br>בחר צורה בפאנל הנפתח.<br>מילוי: ללא / מלא / קיווקוו בתחתית הפאנל.<br>מצולע: מספר צלעות בסרגל העליון (3–20).',
+  rect:     '⬚ <strong>בחירה מלבנית</strong><br>גרור לבחירת שטח — פאנל פעולות נפתח בתחתית.<br>✂️ גזור, 📋 העתק, 💉 טפטפת ממוצע, ⤢ שינוי גודל.',
+  lasso:    '🔆 <strong>לאסו</strong><br>גרור לבחירה חופשית.<br>סגור את הצורה לקבלת שטח בחירה מדויק.',
+  eyedrop:  '💉 <strong>טפטפת</strong><br>לחץ על הקנבס לדגימת צבע בנקודה.<br>לאחר בחירת שטח — לחץ טפטפת לממוצע משוקלל של כל הצבעים בשטח.',
+  ruler:    '📏 <strong>סרגל</strong><br>גרור להזזה. 2 אצבעות לסיבוב.<br>± בסרגל עליון: סיבוב 0.5°, הזזה 0.1מ"מ.',
+  compass:  '🔵 <strong>מחוגה</strong><br>גרור להזזה. 📍 הצמד חוד לנקודה. גרור החוד לציור קשת.',
+  cut:      '✂️ <strong>חותך אזורים</strong><br>לחץ על שטח סגור → נבחר (גבול כתום).<br>🖼️ הדבק בנגיעה → לחץ על הקנבס לממקם כחתיכה. ⚙️ להגדרות מתקדמות.',
+  wallpaper:'🧩 <strong>מילוי טפט</strong><br>1. סמן אזור (מלבן/לאסו) או בחר חתיכה.<br>2. לחץ ➕ בספרייה ליצירת משבצת.<br>3. לחץ על שטח סגור בציור למילוי.<br>גודל / זווית / היסט / סוג חזרה — בפאנל.',
+  move:     '✋ <strong>הזזת חתיכה</strong><br>גרור לשינוי מיקום. פאנל עריכה: גודל, סיבוב, היפוך, עיוות.',
+  zoom:     '🔍 <strong>זום</strong><br>2 אצבעות — pinch לזום.<br>Double-tap — איפוס לגודל מקורי.<br>במצב זום: גרור אצבע אחת להזזת הקנבס.',
+};
+
+function showModeTip(){
+  const box=document.getElementById('modeTipBox');
+  const txt=document.getElementById('modeTipText');
+  if(box.style.display!=='none'){box.style.display='none';return;}
+  const tip=modeTips[mode]||('כלי: <strong>'+mode+'</strong>');
+  txt.innerHTML=tip;
+  box.style.display='block';
+}
+
 function toggleHelp(){
   const p=document.getElementById('helpPanel');
+  const tipBtn=document.getElementById('helpTipBtn');
   if(p.style.display==='none'){
     p.style.display='block';
+    if(tipBtn) tipBtn.style.display='none';
     document.getElementById('helpContent').innerHTML=buildHelp();
   } else {
     p.style.display='none';
+    if(tipBtn) tipBtn.style.display='flex';
   }
 }
 
@@ -5156,6 +5598,18 @@ function buildHelp(){
     ['✌️','שתי אצבעות','Zoom אמיתי. לא פעיל בסרגל/מחוגה.'],
     ['👆👆','Double-tap','איפוס זום לגודל מקורי.'],
     ['📏🔵✌️','סרגל/מחוגה','סיבוב. לחלופין ± בסרגל העליון.'],
+  ])+
+  sec('🧩 מילוי טפט',[
+    ['🧩','כניסה למצב','לחץ על כפתור 🧩 טפט בסרגל התחתון — נפתח פאנל הטפט.'],
+    ['➕','יצירת טפט','סמן אזור (מלבן/לאסו) או חתוך חתיכה, ואז לחץ ➕ בספרייה. האזור/החתיכה נשמרים כמשבצת חוזרת.'],
+    ['🖼️','ספרייה','לחץ על תמונה ממוזערת לבחירת טפט פעיל. ✕ על תמונה למחיקתה.'],
+    ['🔍','תצוגה מקדימה','מוצגת בפינה הימנית של הפאנל — מתעדכנת בזמן אמת.'],
+    ['','גודל','100% / 50% / 200% / מותאם (סליידר 10%–400%).'],
+    ['','זווית','0° / 45° / 90° / מותאם (סליידר 0°–359°).'],
+    ['','היסט X/Y','הזזת נקודת ההתחלה של הטפט — סליידרים −100 עד +100.'],
+    ['','סוג חזרה','רשת (ברירת מחדל) / לבנים (היסט שורה) / שיקוף X / שיקוף XY.'],
+    ['👆','מילוי','לחץ על שטח סגור בציור — הוא יתמלא בטפט עד קו המתאר.'],
+    ['↩️','ביטול','כפתור הביטול הרגיל מבטל את המילוי האחרון.'],
   ]);
 }
 
