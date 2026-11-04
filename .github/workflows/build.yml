@@ -23,7 +23,7 @@ jobs:
           java-version: 21
       - name: Install dependencies
         working-directory: ${{ env.PROJ }}
-        run: npm ci
+        run: npm install
       - name: Sync web app into Android project
         working-directory: ${{ env.PROJ }}
         run: npx cap sync android
