@@ -782,7 +782,7 @@ body{ position:fixed; overflow:hidden; }
     <div style="flex:1;">
       <div class="wp-label" style="margin-bottom:4px;">ספריית טפטים:</div>
       <div id="wpLibrary">
-        <button class="wp-btn" onclick="wpCapture()" style="height:52px;width:52px;font-size:20px;padding:0;" title="סמן אזור/חתיכה ולחץ כאן לשמירה">➕</button>
+        <button id="wpCaptureBtn" class="wp-btn" onclick="wpStartCapture()" style="height:52px;width:52px;font-size:20px;padding:0;" title="לחץ ואז סמן אזור בציור">➕</button>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
@@ -844,20 +844,14 @@ body{ position:fixed; overflow:hidden; }
   </div>
 </div>
 
-<!-- floating tip button -->
-<button id="helpTipBtn" onclick="showModeTip()" title="טיפ לכלי הנוכחי"
-  style="position:fixed;top:8px;right:8px;z-index:70;width:30px;height:30px;border-radius:50%;
-         background:rgba(233,69,96,0.85);border:none;color:#fff;font-size:15px;
-         cursor:pointer;display:flex;align-items:center;justify-content:center;
-         box-shadow:0 2px 6px rgba(0,0,0,0.5);line-height:1;">❓</button>
 <!-- mode tip popup -->
 <div id="modeTipBox" onclick="this.style.display='none'"
-  style="display:none;position:fixed;top:46px;right:8px;z-index:75;max-width:260px;
+  style="display:none;position:fixed;z-index:75;max-width:270px;
          background:#16213e;border:1px solid #4caf50;border-radius:10px;
          padding:12px 14px;color:#eaeaea;font-size:13px;line-height:1.6;
          box-shadow:0 4px 16px rgba(0,0,0,0.6);direction:rtl;font-family:'Heebo',sans-serif;">
   <div id="modeTipText"></div>
-  <div style="margin-top:8px;text-align:left;color:#888;font-size:11px;">לחץ לסגירה</div>
+  <div style="margin-top:8px;text-align:center;color:#888;font-size:11px;">לחץ לסגירה</div>
 </div>
 
 <div id="helpPanel" style="display:none;position:fixed;z-index:80;top:0;left:0;right:0;bottom:0;
@@ -2354,12 +2348,6 @@ document.addEventListener('keydown',e=>{
 // ── MODE ──
 function setMode(m){
   commitText();deselectLabels();
-  // when entering wallpaper mode, save current selection before clearing
-  if(m==='wallpaper'&&typeof selRect!=='undefined'&&selRect){
-    wpPendingSel=Object.assign({},selRect);
-  } else if(m!=='wallpaper'){
-    wpPendingSel=null;
-  }
   if(m!=='rect'&&m!=='lasso'){clearSel();}
   if(piece) stampPiece();
   mode=m;
@@ -3023,6 +3011,7 @@ function finishSel(e){
   if(selMode==='lasso'&&lassoPoints.length>2) lassoPoints.push({...lassoPoints[0]});
   drawSelOverlay();
   updateHandles();
+  if(wpCapturing){wpCaptureFromSel();return;}
   showSelBar();
 }
 
@@ -4099,6 +4088,7 @@ function floodFill(e){
 let wpLibraryData=[];   // [{dataURL,w,h,name}]
 let wpPendingSel=null;  // selection saved before entering wallpaper mode
 let wpActive=null;      // index into wpLibraryData
+let wpCapturing=false;  // waiting for user to draw a selection for capture
 let wpSettings={scale:1,angle:0,offX:0,offY:0,repeat:'grid'};
 
 function toggleWallpaperPanel(){setMode('select');}
@@ -4119,29 +4109,56 @@ function wpSaveStorage(){
   }catch(ex){console.warn('wpSave',ex);}
 }
 
-function wpCapture(){
-  let src=null,sw=0,sh=0;
-  // prefer floating piece
+function wpStartCapture(){
+  // if there's already a floating piece, capture it directly
   if(typeof piece!=='undefined'&&piece&&piece.imageData){
-    sw=piece.imageData.width;sh=piece.imageData.height;
-    const tmp=document.createElement('canvas');tmp.width=sw;tmp.height=sh;
-    tmp.getContext('2d').putImageData(piece.imageData,0,0);
-    src=tmp;
-  } else {
-    // use current selRect or the one saved when entering wallpaper mode
-    const r=(typeof selRect!=='undefined'&&selRect)||wpPendingSel;
-    if(r){
-      sw=r.w||r.width||0;sh=r.h||r.height||0;
-      if(sw>0&&sh>0){
-        const tmp=document.createElement('canvas');tmp.width=sw;tmp.height=sh;
-        tmp.getContext('2d').drawImage(MC,r.x,r.y,sw,sh,0,0,sw,sh);
-        src=tmp;
-      }
-    }
+    wpCaptureFromPiece();
+    return;
   }
-  if(!src||sw<=0||sh<=0){showToast('⚠️ סמן אזור או חתיכה תחילה');return;}
-  const dataURL=src.toDataURL();
-  const tile={dataURL,w:sw,h:sh,name:'טפט '+(wpLibraryData.length+1)};
+  // enter capture mode: switch to rect selection, highlight button
+  wpCapturing=true;
+  const btn=document.getElementById('wpCaptureBtn');
+  if(btn){btn.style.background='#4caf50';btn.textContent='✂️';btn.title='כעת סמן אזור בציור...';}
+  // close wallpaper panel temporarily so user can see canvas
+  const panel=document.getElementById('wallpaperPanel');
+  if(panel) panel.style.display='none';
+  setMode('rect');
+  showToast('סמן אזור בציור לטפט — גרור מלבן');
+}
+
+function wpCaptureFromSel(){
+  // called after selection is complete when wpCapturing=true
+  if(!wpCapturing) return;
+  wpCapturing=false;
+  const btn=document.getElementById('wpCaptureBtn');
+  if(btn){btn.style.background='';btn.textContent='➕';btn.title='לחץ ואז סמן אזור בציור';}
+  // reopen wallpaper panel
+  const panel=document.getElementById('wallpaperPanel');
+  if(panel) panel.style.display='flex';
+  setMode('wallpaper');
+  // now capture from selRect
+  const r=typeof selRect!=='undefined'?selRect:null;
+  if(!r){showToast('⚠️ לא סומן אזור');return;}
+  const sw=r.w||r.width||0, sh=r.h||r.height||0;
+  if(sw<=0||sh<=0){showToast('⚠️ אזור קטן מדי');return;}
+  const tmp=document.createElement('canvas');tmp.width=sw;tmp.height=sh;
+  tmp.getContext('2d').drawImage(MC,r.x,r.y,sw,sh,0,0,sw,sh);
+  wpSaveTile(tmp,sw,sh);
+  clearSel();
+}
+
+function wpCaptureFromPiece(){
+  const p=piece;
+  if(!p||!p.imageData) return;
+  const sw=p.imageData.width,sh=p.imageData.height;
+  const tmp=document.createElement('canvas');tmp.width=sw;tmp.height=sh;
+  tmp.getContext('2d').putImageData(p.imageData,0,0);
+  wpSaveTile(tmp,sw,sh);
+}
+
+function wpSaveTile(canvas,w,h){
+  const dataURL=canvas.toDataURL();
+  const tile={dataURL,w,h,name:'טפט '+(wpLibraryData.length+1)};
   wpLibraryData.push(tile);
   wpActive=wpLibraryData.length-1;
   wpSaveStorage();
@@ -5462,30 +5479,55 @@ const modeTips={
   ruler:    '📏 <strong>סרגל</strong><br>גרור להזזה. 2 אצבעות לסיבוב.<br>± בסרגל עליון: סיבוב 0.5°, הזזה 0.1מ"מ.',
   compass:  '🔵 <strong>מחוגה</strong><br>גרור להזזה. 📍 הצמד חוד לנקודה. גרור החוד לציור קשת.',
   cut:      '✂️ <strong>חותך אזורים</strong><br>לחץ על שטח סגור → נבחר (גבול כתום).<br>🖼️ הדבק בנגיעה → לחץ על הקנבס לממקם כחתיכה. ⚙️ להגדרות מתקדמות.',
-  wallpaper:'🧩 <strong>מילוי טפט</strong><br>1. סמן אזור (מלבן/לאסו) או בחר חתיכה.<br>2. לחץ ➕ בספרייה ליצירת משבצת.<br>3. לחץ על שטח סגור בציור למילוי.<br>גודל / זווית / היסט / סוג חזרה — בפאנל.',
+  wallpaper:'🧩 <strong>מילוי טפט</strong><br><b>דרך א׳ — חתיכה מרחפת:</b> גזור/העתק שטח ← עבור לטפט ← לחץ ➕ → נכנס ישר לספרייה.<br><b>דרך ב׳ — בחירה חדשה:</b> לחץ ➕ ← סמן אזור בציור → נכנס לספרייה אוטומטית.<br>לחץ על שטח סגור בציור למילוי בטפט הפעיל.',
   move:     '✋ <strong>הזזת חתיכה</strong><br>גרור לשינוי מיקום. פאנל עריכה: גודל, סיבוב, היפוך, עיוות.',
   zoom:     '🔍 <strong>זום</strong><br>2 אצבעות — pinch לזום.<br>Double-tap — איפוס לגודל מקורי.<br>במצב זום: גרור אצבע אחת להזזת הקנבס.',
 };
 
-function showModeTip(){
+function showModeTip(btn){
   const box=document.getElementById('modeTipBox');
   const txt=document.getElementById('modeTipText');
   if(box.style.display!=='none'){box.style.display='none';return;}
   const tip=modeTips[mode]||('כלי: <strong>'+mode+'</strong>');
   txt.innerHTML=tip;
   box.style.display='block';
+  // position above the button that was long-pressed
+  if(btn){
+    const r=btn.getBoundingClientRect();
+    const bw=270;
+    let left=r.left+r.width/2-bw/2;
+    left=Math.max(4,Math.min(left,window.innerWidth-bw-4));
+    const top=Math.max(4,r.top-box.offsetHeight-8);
+    box.style.left=left+'px';
+    box.style.top=top+'px';
+    box.style.bottom='';
+  } else {
+    box.style.left='8px'; box.style.bottom='80px'; box.style.top='';
+  }
 }
+
+// long-press on any tool button shows tip
+(function initToolTips(){
+  let lpTimer=null;
+  document.addEventListener('pointerdown',e=>{
+    const btn=e.target.closest('.tool-btn');
+    if(!btn) return;
+    lpTimer=setTimeout(()=>{
+      lpTimer=null;
+      showModeTip(btn);
+    },500);
+  });
+  document.addEventListener('pointerup',()=>{if(lpTimer){clearTimeout(lpTimer);lpTimer=null;}});
+  document.addEventListener('pointermove',()=>{if(lpTimer){clearTimeout(lpTimer);lpTimer=null;}});
+})();
 
 function toggleHelp(){
   const p=document.getElementById('helpPanel');
-  const tipBtn=document.getElementById('helpTipBtn');
   if(p.style.display==='none'){
     p.style.display='block';
-    if(tipBtn) tipBtn.style.display='none';
     document.getElementById('helpContent').innerHTML=buildHelp();
   } else {
     p.style.display='none';
-    if(tipBtn) tipBtn.style.display='flex';
   }
 }
 
@@ -5574,6 +5616,7 @@ function buildHelp(){
     ['🗑️','נקה','מחיקת כל הציור עם אישור.'],
     ['↕️','סדר','לחיצה קצרה: בחר→לחץ יעד להזזת כפתורים. לחיצה ארוכה: פאנל עם ↑↓, 📤 יצוא הגדרות, 📥 יבוא הגדרות, ↺ איפוס.'],
     ['❓','עזרה','מסך זה — בסוף הסרגל התחתון.'],
+    ['👆','טיפ לכלי','לחיצה ארוכה (חצי שניה) על כל כפתור כלי — מציג טיפ קצר לאותו כלי. לחץ על הטיפ לסגירה.'],
   ])+
   sec('✂️ חותך אזורים',[
     ['✂️','כניסה למצב','לחץ על כפתור ✂️ חותך בסרגל התחתון.'],
@@ -5601,7 +5644,7 @@ function buildHelp(){
   ])+
   sec('🧩 מילוי טפט',[
     ['🧩','כניסה למצב','לחץ על כפתור 🧩 טפט בסרגל התחתון — נפתח פאנל הטפט.'],
-    ['➕','יצירת טפט','סמן אזור (מלבן/לאסו) או חתוך חתיכה, ואז לחץ ➕ בספרייה. האזור/החתיכה נשמרים כמשבצת חוזרת.'],
+    ['➕','יצירת טפט','<b>דרך א׳:</b> גזור/העתק שטח ← עבור לטפט ← לחץ ➕ — החתיכה המרחפת נכנסת ישר לספרייה.<br><b>דרך ב׳:</b> לחץ ➕ ← סמן אזור בציור — נכנס לספרייה אוטומטית בסיום.'],
     ['🖼️','ספרייה','לחץ על תמונה ממוזערת לבחירת טפט פעיל. ✕ על תמונה למחיקתה.'],
     ['🔍','תצוגה מקדימה','מוצגת בפינה הימנית של הפאנל — מתעדכנת בזמן אמת.'],
     ['','גודל','100% / 50% / 200% / מותאם (סליידר 10%–400%).'],
