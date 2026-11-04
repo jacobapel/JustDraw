@@ -5479,7 +5479,7 @@ const modeTips={
   ruler:    '📏 <strong>סרגל</strong><br>גרור להזזה. 2 אצבעות לסיבוב.<br>± בסרגל עליון: סיבוב 0.5°, הזזה 0.1מ"מ.',
   compass:  '🔵 <strong>מחוגה</strong><br>גרור להזזה. 📍 הצמד חוד לנקודה. גרור החוד לציור קשת.',
   cut:      '✂️ <strong>חותך אזורים</strong><br>לחץ על שטח סגור → נבחר (גבול כתום).<br>🖼️ הדבק בנגיעה → לחץ על הקנבס לממקם כחתיכה. ⚙️ להגדרות מתקדמות.',
-  wallpaper:'🧩 <strong>מילוי טפט</strong><br><b>דרך א׳ — חתיכה מרחפת:</b> גזור/העתק שטח ← עבור לטפט ← לחץ ➕ → נכנס ישר לספרייה.<br><b>דרך ב׳ — בחירה חדשה:</b> לחץ ➕ ← סמן אזור בציור → נכנס לספרייה אוטומטית.<br>לחץ על שטח סגור בציור למילוי בטפט הפעיל.',
+  wallpaper:'🧩 <strong>מילוי טפט</strong><br>➕ ליצירת טפט מאזור:<br>• יש חתיכה מרחפת → לחץ ➕ → נכנס לספרייה מיד.<br>• אין חתיכה → לחץ ➕ → סמן אזור בציור → נכנס לספרייה.<br>לאחר מכן: לחץ על שטח סגור בציור למילוי בטפט.',
   move:     '✋ <strong>הזזת חתיכה</strong><br>גרור לשינוי מיקום. פאנל עריכה: גודל, סיבוב, היפוך, עיוות.',
   zoom:     '🔍 <strong>זום</strong><br>2 אצבעות — pinch לזום.<br>Double-tap — איפוס לגודל מקורי.<br>במצב זום: גרור אצבע אחת להזזת הקנבס.',
 };
@@ -5507,19 +5507,24 @@ function showModeTip(btn){
 }
 
 // long-press on any tool button shows tip
-(function initToolTips(){
-  let lpTimer=null;
+document.addEventListener('DOMContentLoaded',function(){
+  let lpTimer=null, lpBtn=null, lpX=0, lpY=0;
   document.addEventListener('pointerdown',e=>{
     const btn=e.target.closest('.tool-btn');
     if(!btn) return;
+    lpBtn=btn; lpX=e.clientX; lpY=e.clientY;
     lpTimer=setTimeout(()=>{
       lpTimer=null;
-      showModeTip(btn);
+      showModeTip(lpBtn);
     },500);
   });
   document.addEventListener('pointerup',()=>{if(lpTimer){clearTimeout(lpTimer);lpTimer=null;}});
-  document.addEventListener('pointermove',()=>{if(lpTimer){clearTimeout(lpTimer);lpTimer=null;}});
-})();
+  document.addEventListener('pointermove',e=>{
+    if(!lpTimer) return;
+    // cancel only if moved more than 10px
+    if(Math.abs(e.clientX-lpX)>10||Math.abs(e.clientY-lpY)>10){clearTimeout(lpTimer);lpTimer=null;}
+  });
+});
 
 function toggleHelp(){
   const p=document.getElementById('helpPanel');
