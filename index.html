@@ -4679,41 +4679,8 @@ async function pickSaveFolder(){
 }
 
 async function saveImage(filename){
-  filename=filename||'ציור.png';
   const dataURL=getFlatCanvas().toDataURL('image/png');
-  const bs=atob(dataURL.split(',')[1]);
-  const arr=new Uint8Array(bs.length);
-  for(let i=0;i<bs.length;i++) arr[i]=bs.charCodeAt(i);
-  const blob=new Blob([arr],{type:'image/png'});
-
-  // Method 1: saved folder handle (user picked folder once)
-  if(!savedFolderHandle) savedFolderHandle=await getSavedFolder();
-  if(savedFolderHandle){
-    try{
-      const fh=await savedFolderHandle.getFileHandle(filename,{create:true});
-      const w=await fh.createWritable(); await w.write(blob); await w.close();
-      showToast('💾 נשמר ב-'+savedFolderHandle.name+': '+filename); return;
-    }catch(e){ savedFolderHandle=null; } // if failed, fall through
-  }
-
-  // Method 2: blob URL download
-  try{
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url; a.download=filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url),5000);
-    showToast('💾 נשמר: '+filename); return;
-  }catch(e){}
-
-  // Method 3: Web Share API
-  const sf=new File([blob],filename,{type:'image/png'});
-  if(navigator.canShare&&navigator.canShare({files:[sf]})){
-    try{ await navigator.share({files:[sf],title:filename}); showToast('✅ שותף!'); return; }
-    catch(e){ if(e.name==='AbortError') return; }
-  }
-
-  showToast('⚠️ שמירה לא נתמכת');
+  await saveImageFromDataURL(dataURL,filename||'ציור.png');
 }
 
 function askSaveName(def){
@@ -4743,12 +4710,60 @@ async function downloadCanvas(){
   const now=new Date();
   const pad=n=>String(n).padStart(2,'0');
   const def=`ציור ${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}-${pad(now.getMinutes())}`;
+  // snapshot BEFORE dialog opens (keyboard resize can destroy canvas on Android)
+  const snap=getFlatCanvas().toDataURL('image/png');
   const inp=await askSaveName(def);
   if(inp===null) return;
   const chosen=inp.trim()||def;
   const filename=chosen.replace(/[\\/:*?"<>|]/g,'_');
   const fn=filename.endsWith('.png')?filename:filename+'.png';
-  await saveImage(fn);
+  await saveImageFromDataURL(snap,fn);
+}
+
+async function saveImageFromDataURL(dataURL,filename){
+  filename=filename||'ציור.png';
+  const bs=atob(dataURL.split(',')[1]);
+  const arr=new Uint8Array(bs.length);
+  for(let i=0;i<bs.length;i++) arr[i]=bs.charCodeAt(i);
+  const blob=new Blob([arr],{type:'image/png'});
+
+  // Android APK: use Web Share (only reliable method in WebView)
+  if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
+    const sf=new File([blob],filename,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[sf]})){
+      try{ await navigator.share({files:[sf],title:filename}); showToast('✅ שותף!'); return; }
+      catch(e){ if(e.name==='AbortError') return; }
+    }
+    showToast('⚠️ שיתוף לא זמין במכשיר זה'); return;
+  }
+
+  // Method 2: saved folder handle
+  if(!savedFolderHandle) savedFolderHandle=await getSavedFolder();
+  if(savedFolderHandle){
+    try{
+      const fh=await savedFolderHandle.getFileHandle(filename,{create:true});
+      const w=await fh.createWritable(); await w.write(blob); await w.close();
+      showToast('💾 נשמר ב-'+savedFolderHandle.name+': '+filename); return;
+    }catch(e){ savedFolderHandle=null; }
+  }
+
+  // Method 3: blob URL download
+  try{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    showToast('💾 נשמר: '+filename); return;
+  }catch(e){}
+
+  // Method 4: Web Share
+  const sf=new File([blob],filename,{type:'image/png'});
+  if(navigator.canShare&&navigator.canShare({files:[sf]})){
+    try{ await navigator.share({files:[sf],title:filename}); showToast('✅ שותף!'); return; }
+    catch(e){ if(e.name==='AbortError') return; }
+  }
+  showToast('⚠️ שמירה לא נתמכת');
 }
 
 // ── CLEAR ──
