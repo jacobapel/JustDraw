@@ -4669,10 +4669,6 @@ async function saveFolderHandle(handle){
 }
 
 async function pickSaveFolder(){
-  // Android APK: show destination picker dialog
-  if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
-    return showSaveDestDialog();
-  }
   if(!window.showDirectoryPicker){ showToast('⚠️ הדפדפן לא תומך בבחירת תיקייה'); return; }
   try{
     const handle=await window.showDirectoryPicker({mode:'readwrite'});
@@ -4682,45 +4678,42 @@ async function pickSaveFolder(){
   }catch(e){ if(e.name!=='AbortError') showToast('⚠️ לא נבחרה תיקייה'); }
 }
 
-// Android save-destination preference
-let _saveDest='share'; // 'share' | 'downloads' | 'gallery'
-function showSaveDestDialog(){
-  return new Promise(resolve=>{
-    const ov=document.createElement('div');
-    ov.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
-    const cur=_saveDest;
-    ov.innerHTML=`<div dir="rtl" style="background:var(--panel);border:1.5px solid #2a2a4a;border-radius:16px;padding:20px;width:100%;max-width:340px;font-family:Heebo,sans-serif;color:#e8e8f0;">
-      <div style="font-size:16px;font-weight:700;margin-bottom:16px;">📁 יעד שמירה</div>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <button id="sdShare"    style="padding:12px;border-radius:10px;border:2px solid ${cur==='share'?'#9c5fce':'#2a2a4a'};background:${cur==='share'?'rgba(156,95,206,.15)':'#0f1a30'};color:#e8e8f0;font-family:Heebo,sans-serif;font-size:14px;text-align:right;cursor:pointer;">📤 שתף — בחר יעד בכל פעם</button>
-        <button id="sdDownloads" style="padding:12px;border-radius:10px;border:2px solid ${cur==='downloads'?'#9c5fce':'#2a2a4a'};background:${cur==='downloads'?'rgba(156,95,206,.15)':'#0f1a30'};color:#e8e8f0;font-family:Heebo,sans-serif;font-size:14px;text-align:right;cursor:pointer;">⬇️ הורדות — שמור ישירות</button>
-        <button id="sdGallery"  style="padding:12px;border-radius:10px;border:2px solid ${cur==='gallery'?'#9c5fce':'#2a2a4a'};background:${cur==='gallery'?'rgba(156,95,206,.15)':'#0f1a30'};color:#e8e8f0;font-family:Heebo,sans-serif;font-size:14px;text-align:right;cursor:pointer;">🖼️ גלריה — שמור לגלריית התמונות</button>
-      </div>
-      <div style="margin-top:16px;text-align:center;">
-        <button id="sdCancel" style="padding:8px 20px;border-radius:10px;border:1.5px solid #2a2a4a;background:none;color:#aab;font-family:Heebo,sans-serif;font-size:14px;cursor:pointer;">ביטול</button>
-      </div>
-    </div>`;
-    document.body.appendChild(ov);
-    const pick=dest=>{
-      _saveDest=dest;
-      try{localStorage.setItem('saveDest',dest);}catch(e){}
-      ov.remove();
-      const labels={'share':'שתף','downloads':'הורדות','gallery':'גלריה'};
-      showToast('📁 יעד שמירה: '+labels[dest]);
-      resolve();
-    };
-    ov.querySelector('#sdShare').onclick=()=>pick('share');
-    ov.querySelector('#sdDownloads').onclick=()=>pick('downloads');
-    ov.querySelector('#sdGallery').onclick=()=>pick('gallery');
-    ov.querySelector('#sdCancel').onclick=()=>{ov.remove();resolve();};
-  });
-}
-// load saved preference
-try{const d=localStorage.getItem('saveDest');if(d)_saveDest=d;}catch(e){}
-
 async function saveImage(filename){
+  filename=filename||'ציור.png';
   const dataURL=getFlatCanvas().toDataURL('image/png');
-  await saveImageFromDataURL(dataURL,filename||'ציור.png');
+  const bs=atob(dataURL.split(',')[1]);
+  const arr=new Uint8Array(bs.length);
+  for(let i=0;i<bs.length;i++) arr[i]=bs.charCodeAt(i);
+  const blob=new Blob([arr],{type:'image/png'});
+
+  // Method 1: saved folder handle (user picked folder once)
+  if(!savedFolderHandle) savedFolderHandle=await getSavedFolder();
+  if(savedFolderHandle){
+    try{
+      const fh=await savedFolderHandle.getFileHandle(filename,{create:true});
+      const w=await fh.createWritable(); await w.write(blob); await w.close();
+      showToast('💾 נשמר ב-'+savedFolderHandle.name+': '+filename); return;
+    }catch(e){ savedFolderHandle=null; } // if failed, fall through
+  }
+
+  // Method 2: blob URL download
+  try{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    showToast('💾 נשמר: '+filename); return;
+  }catch(e){}
+
+  // Method 3: Web Share API
+  const sf=new File([blob],filename,{type:'image/png'});
+  if(navigator.canShare&&navigator.canShare({files:[sf]})){
+    try{ await navigator.share({files:[sf],title:filename}); showToast('✅ שותף!'); return; }
+    catch(e){ if(e.name==='AbortError') return; }
+  }
+
+  showToast('⚠️ שמירה לא נתמכת');
 }
 
 function askSaveName(def){
@@ -4750,82 +4743,12 @@ async function downloadCanvas(){
   const now=new Date();
   const pad=n=>String(n).padStart(2,'0');
   const def=`ציור ${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}-${pad(now.getMinutes())}`;
-  // snapshot BEFORE dialog opens (keyboard resize can destroy canvas on Android)
-  const snap=getFlatCanvas().toDataURL('image/png');
   const inp=await askSaveName(def);
   if(inp===null) return;
   const chosen=inp.trim()||def;
   const filename=chosen.replace(/[\\/:*?"<>|]/g,'_');
   const fn=filename.endsWith('.png')?filename:filename+'.png';
-  await saveImageFromDataURL(snap,fn);
-}
-
-async function saveImageFromDataURL(dataURL,filename){
-  filename=filename||'ציור.png';
-  const b64=dataURL.split(',')[1];
-  const bs=atob(b64);
-  const arr=new Uint8Array(bs.length);
-  for(let i=0;i<bs.length;i++) arr[i]=bs.charCodeAt(i);
-  const blob=new Blob([arr],{type:'image/png'});
-  const sf=new File([blob],filename,{type:'image/png'});
-
-  // Android APK (Capacitor)
-  if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
-    const dest=_saveDest||'share';
-
-    if(dest==='share'){
-      if(navigator.canShare&&navigator.canShare({files:[sf]})){
-        try{ await navigator.share({files:[sf],title:filename}); showToast('✅ שותף!'); return; }
-        catch(e){ if(e.name==='AbortError') return; }
-      }
-      showToast('⚠️ שיתוף לא זמין'); return;
-    }
-
-    if(dest==='downloads'||dest==='gallery'){
-      try{
-        const {Filesystem,Directory}=window.Capacitor.Plugins||{};
-        if(Filesystem){
-          const dir=dest==='gallery'?(Directory.ExternalStorage||'EXTERNAL_STORAGE'):(Directory.ExternalStorage||'EXTERNAL_STORAGE');
-          const path=dest==='gallery'?('Pictures/JustDraw/'+filename):('Download/'+filename);
-          await Filesystem.writeFile({path,data:b64,directory:dir,recursive:true});
-          showToast('💾 נשמר: '+filename); return;
-        }
-      }catch(e){ console.warn('Filesystem failed',e); }
-      // fallback to share
-      if(navigator.canShare&&navigator.canShare({files:[sf]})){
-        try{ await navigator.share({files:[sf],title:filename}); showToast('✅ שותף! (שמירה ישירה נכשלה)'); return; }
-        catch(e){ if(e.name==='AbortError') return; }
-      }
-      showToast('⚠️ שמירה נכשלה — נסה "שתף"'); return;
-    }
-  }
-
-  // Desktop/browser: saved folder handle
-  if(!savedFolderHandle) savedFolderHandle=await getSavedFolder();
-  if(savedFolderHandle){
-    try{
-      const fh=await savedFolderHandle.getFileHandle(filename,{create:true});
-      const w=await fh.createWritable(); await w.write(blob); await w.close();
-      showToast('💾 נשמר ב-'+savedFolderHandle.name+': '+filename); return;
-    }catch(e){ savedFolderHandle=null; }
-  }
-
-  // Desktop: blob download
-  try{
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url; a.download=filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url),5000);
-    showToast('💾 נשמר: '+filename); return;
-  }catch(e){}
-
-  // Last resort: Web Share
-  if(navigator.canShare&&navigator.canShare({files:[sf]})){
-    try{ await navigator.share({files:[sf],title:filename}); showToast('✅ שותף!'); return; }
-    catch(e){ if(e.name==='AbortError') return; }
-  }
-  showToast('⚠️ שמירה לא נתמכת');
+  await saveImage(fn);
 }
 
 // ── CLEAR ──
