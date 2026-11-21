@@ -4727,14 +4727,23 @@ async function saveImageFromDataURL(dataURL,filename){
   for(let i=0;i<bs.length;i++) arr[i]=bs.charCodeAt(i);
   const blob=new Blob([arr],{type:'image/png'});
 
-  // Android APK: use Web Share (only reliable method in WebView)
+  // Method 1: Capacitor Filesystem (Android APK)
   if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
+    try{
+      const {Filesystem,Directory}=window.Capacitor.Plugins||{};
+      if(Filesystem){
+        const b64=dataURL.split(',')[1];
+        await Filesystem.writeFile({path:filename,data:b64,directory:Directory.Documents||'DOCUMENTS',recursive:true});
+        showToast('💾 נשמר: '+filename); return;
+      }
+    }catch(e){ console.warn('Capacitor save failed',e); }
+    // fallback: Web Share
     const sf=new File([blob],filename,{type:'image/png'});
     if(navigator.canShare&&navigator.canShare({files:[sf]})){
       try{ await navigator.share({files:[sf],title:filename}); showToast('✅ שותף!'); return; }
       catch(e){ if(e.name==='AbortError') return; }
     }
-    showToast('⚠️ שיתוף לא זמין במכשיר זה'); return;
+    showToast('⚠️ לא נשמר'); return;
   }
 
   // Method 2: saved folder handle
